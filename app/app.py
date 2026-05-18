@@ -1,39 +1,31 @@
-from __future__ import annotations
-
-import json
-from datetime import datetime
 from pathlib import Path
-from typing import Any
+import json
+import random
 
 import numpy as np
 import onnxruntime as ort
-import pandas as pd
 import streamlit as st
 from PIL import Image, ImageOps
 
 
 # =====================================================
 # Rutas del proyecto
-# Funciona si el archivo está en:
-# - app/app.py  -> usa la raíz del repositorio
-# - app.py      -> usa la carpeta actual
 # =====================================================
 
-APP_DIR = Path(__file__).resolve().parent
-BASE_DIR = APP_DIR.parent if (APP_DIR.parent / "models").exists() else APP_DIR
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 MODEL_PATH = BASE_DIR / "models" / "modelo_arboles.onnx"
 CLASSES_PATH = BASE_DIR / "models" / "clases.json"
 INFO_PATH = BASE_DIR / "data" / "species_info.json"
 
+
+# =====================================================
+# Configuración general
+# =====================================================
+
 IMAGE_SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-
-
-# =====================================================
-# Configuración visual
-# =====================================================
 
 st.set_page_config(
     page_title="TreeLens | Clasificador de árboles",
@@ -42,93 +34,174 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-CUSTOM_CSS = """
-<style>
-.main .block-container { padding-top: 2rem; padding-bottom: 2rem; }
-.hero {
-    padding: 1.5rem 1.8rem;
-    border-radius: 1.25rem;
-    background: linear-gradient(135deg, #E8F5E9 0%, #FFFFFF 60%, #F1F8E9 100%);
-    border: 1px solid #D7EAD7;
-    margin-bottom: 1.1rem;
-}
-.hero h1 { margin-bottom: .25rem; }
-.small-muted { color: #5f6f64; font-size: .95rem; }
-.pred-card {
-    padding: .9rem 1rem;
-    border-radius: .9rem;
-    background: #ffffff;
-    border: 1px solid #E2E8E2;
-    box-shadow: 0 1px 8px rgba(0,0,0,.04);
-    margin-bottom: .7rem;
-}
-.info-card {
-    padding: 1.1rem 1.25rem;
-    border-radius: 1rem;
-    background: #ffffff;
-    border: 1px solid #E1EAE1;
-    margin-bottom: 1rem;
-}
-.badge {
-    display: inline-block;
-    padding: .2rem .55rem;
-    border-radius: 999px;
-    background: #E8F5E9;
-    color: #1B5E20;
-    font-size: .85rem;
-    border: 1px solid #CFE8D1;
-}
-.warning-box {
-    padding: .85rem 1rem;
-    border-radius: .8rem;
-    background: #FFF8E1;
-    border: 1px solid #FFE082;
-}
-</style>
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
 
 # =====================================================
-# Carga de archivos
+# Estilos visuales
 # =====================================================
 
-@st.cache_resource(show_spinner="Cargando modelo ONNX...")
-def load_session() -> ort.InferenceSession:
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"No se encontró el modelo en: {MODEL_PATH}")
+def aplicar_estilos():
+    st.markdown(
+        """
+        <style>
+        :root {
+            --green-dark: #123524;
+            --green-main: #1B5E20;
+            --green-soft: #E8F5E9;
+            --green-card: #F1F8E9;
+            --green-line: #A5D6A7;
+            --text-main: #1B1B1B;
+        }
 
-    return ort.InferenceSession(
-        str(MODEL_PATH),
-        providers=["CPUExecutionProvider"],
+        .stApp {
+            background:
+                radial-gradient(circle at top left, rgba(129, 199, 132, 0.28), transparent 28%),
+                linear-gradient(180deg, #FBFFF9 0%, #F4FBF2 100%);
+        }
+
+        h1, h2, h3 {
+            color: var(--green-dark);
+        }
+
+        .hero-card {
+            padding: 1.4rem 1.6rem;
+            border-radius: 24px;
+            background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 52%, #66BB6A 100%);
+            color: white;
+            box-shadow: 0 12px 30px rgba(27, 94, 32, 0.20);
+            margin-bottom: 1rem;
+        }
+
+        .hero-card h1 {
+            color: white;
+            margin-bottom: 0.2rem;
+        }
+
+        .hero-card p {
+            color: #F1F8E9;
+            font-size: 1.05rem;
+            margin-bottom: 0;
+        }
+
+        .green-card {
+            padding: 1.15rem 1.25rem;
+            border-radius: 20px;
+            border: 1px solid var(--green-line);
+            background: rgba(241, 248, 233, 0.90);
+            box-shadow: 0 8px 22px rgba(27, 94, 32, 0.08);
+            margin-bottom: 1rem;
+        }
+
+        .metric-card {
+            padding: 1rem;
+            border-radius: 18px;
+            background: white;
+            border: 1px solid #C8E6C9;
+            text-align: center;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.04);
+        }
+
+        .metric-label {
+            font-size: 0.82rem;
+            color: #4B604D;
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-value {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #1B5E20;
+        }
+
+        .species-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #123524;
+            margin-bottom: 0.1rem;
+        }
+
+        .scientific-name {
+            font-style: italic;
+            color: #2E7D32;
+            font-size: 1.05rem;
+            margin-bottom: 1rem;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            background: #C8E6C9;
+            color: #1B5E20;
+            font-weight: 600;
+            font-size: 0.82rem;
+            margin: 0.15rem 0.25rem 0.15rem 0;
+        }
+
+        div.stButton > button {
+            border-radius: 999px;
+            border: 1px solid #2E7D32;
+            background: #2E7D32;
+            color: white;
+            font-weight: 700;
+            padding: 0.55rem 1rem;
+        }
+
+        div.stButton > button:hover {
+            border: 1px solid #1B5E20;
+            background: #1B5E20;
+            color: white;
+        }
+
+        .stProgress > div > div > div > div {
+            background-color: #2E7D32;
+        }
+
+        section[data-testid="stSidebar"] {
+            background: #F1F8E9;
+        }
+
+        .small-note {
+            color: #4B604D;
+            font-size: 0.9rem;
+        }
+
+        .quiz-question {
+            padding: 1rem;
+            border-radius: 16px;
+            border: 1px solid #C8E6C9;
+            background: white;
+            margin-bottom: 1rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
 
-@st.cache_data(show_spinner=False)
-def load_labels() -> list[str]:
+aplicar_estilos()
+
+
+# =====================================================
+# Utilidades de carga
+# =====================================================
+
+@st.cache_data
+def cargar_clases():
     if not CLASSES_PATH.exists():
-        raise FileNotFoundError(f"No se encontró el archivo de clases en: {CLASSES_PATH}")
+        st.error(f"No se encontró el archivo de clases en: {CLASSES_PATH}")
+        st.stop()
 
     with open(CLASSES_PATH, "r", encoding="utf-8") as f:
-        labels = json.load(f)
+        raw_classes = json.load(f)
 
-    if isinstance(labels, list):
-        return labels
+    if isinstance(raw_classes, dict):
+        return [raw_classes[str(i)] for i in range(len(raw_classes))]
 
-    # Soporta también formato {"0": "aguacate", "1": "caucho", ...}
-    if isinstance(labels, dict):
-        if all(str(k).isdigit() for k in labels.keys()):
-            return [labels[str(i)] for i in range(len(labels))]
-
-        # Soporta formato {"aguacate": 0, "caucho": 1, ...}
-        inverted = {int(v): k for k, v in labels.items()}
-        return [inverted[i] for i in range(len(inverted))]
-
-    raise ValueError("Formato de clases.json no reconocido.")
+    return raw_classes
 
 
-@st.cache_data(show_spinner=False)
-def load_species_info() -> dict[str, dict[str, Any]]:
+@st.cache_data
+def cargar_info_especies():
     if not INFO_PATH.exists():
         return {}
 
@@ -136,18 +209,47 @@ def load_species_info() -> dict[str, dict[str, Any]]:
         return json.load(f)
 
 
+@st.cache_resource
+def cargar_modelo():
+    if not MODEL_PATH.exists():
+        st.error(f"No se encontró el modelo ONNX en: {MODEL_PATH}")
+        st.stop()
+
+    session = ort.InferenceSession(
+        str(MODEL_PATH),
+        providers=["CPUExecutionProvider"],
+    )
+    input_name = session.get_inputs()[0].name
+    output_name = session.get_outputs()[0].name
+    return session, input_name, output_name
+
+
+class_names = cargar_clases()
+species_info = cargar_info_especies()
+session, input_name, output_name = cargar_modelo()
+
+
 # =====================================================
-# Inferencia
+# Procesamiento e inferencia
 # =====================================================
 
-def normalize_label(label: str) -> str:
-    return label.replace("_", " ").title()
+def nombre_limpio(nombre: str) -> str:
+    return nombre.replace("_", " ").title()
 
 
-def preprocess_image(image: Image.Image) -> np.ndarray:
-    """Mismo preprocesamiento usado en entrenamiento: RGB, Resize, ToTensor y Normalize."""
-    image = ImageOps.exif_transpose(image).convert("RGB")
-    image = image.resize((IMAGE_SIZE, IMAGE_SIZE), Image.Resampling.BILINEAR)
+def obtener_info(nombre: str) -> dict:
+    return species_info.get(nombre, species_info.get(nombre.lower(), {}))
+
+
+def preprocesar_imagen(image: Image.Image) -> np.ndarray:
+    image = image.convert("RGB")
+
+    # Se usa Resize directo porque el entrenamiento reportado usaba Resize((224, 224)).
+    image = ImageOps.fit(
+        image,
+        (IMAGE_SIZE, IMAGE_SIZE),
+        method=Image.Resampling.BILINEAR,
+    )
 
     array = np.asarray(image).astype(np.float32) / 255.0
     array = (array - MEAN) / STD
@@ -158,319 +260,427 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
 
 
 def softmax(logits: np.ndarray) -> np.ndarray:
-    logits = logits.astype(np.float32)
     logits = logits - np.max(logits)
     exp_values = np.exp(logits)
     return exp_values / np.sum(exp_values)
 
 
-def predict(image: Image.Image, top_k: int = 5) -> pd.DataFrame:
-    session = load_session()
-    labels = load_labels()
-    input_array = preprocess_image(image)
-
-    input_name = session.get_inputs()[0].name
-    output_name = session.get_outputs()[0].name
-
-    logits = session.run([output_name], {input_name: input_array})[0][0]
+def predecir(image: Image.Image, top_k: int = 5):
+    input_array = preprocesar_imagen(image)
+    outputs = session.run([output_name], {input_name: input_array})
+    logits = outputs[0][0]
     probabilities = softmax(logits)
 
     top_indices = probabilities.argsort()[::-1][:top_k]
 
-    rows = []
+    resultados = []
     for idx in top_indices:
-        idx = int(idx)
-        rows.append(
+        resultados.append(
             {
-                "clase": labels[idx],
-                "especie": normalize_label(labels[idx]),
-                "probabilidad": float(probabilities[idx]),
-                "porcentaje": float(probabilities[idx] * 100),
+                "id": int(idx),
+                "clase": class_names[int(idx)],
+                "nombre": nombre_limpio(class_names[int(idx)]),
+                "probabilidad": float(probabilities[int(idx)]),
             }
         )
 
-    return pd.DataFrame(rows)
-
-
-def confidence_message(confidence: float) -> tuple[str, str]:
-    if confidence >= 0.80:
-        return "Alta", "Predicción fuerte. Aun así, valida con rasgos botánicos visibles."
-    if confidence >= 0.50:
-        return "Media", "Predicción razonable. Conviene tomar otra foto con mejor ángulo o iluminación."
-    return "Baja", "La imagen puede no mostrar rasgos suficientes o estar fuera del conjunto de entrenamiento."
+    return resultados
 
 
 # =====================================================
 # Componentes visuales
 # =====================================================
 
-def show_species_card(class_key: str, confidence: float | None = None) -> None:
-    info = load_species_info().get(class_key, {})
+def mostrar_info_especie(nombre_modelo: str, mostrar_boton_quiz: bool = True):
+    info = obtener_info(nombre_modelo)
 
-    display_name = info.get("nombre_comun", normalize_label(class_key))
-    scientific = info.get("nombre_cientifico", "No disponible")
-    family = info.get("familia", "No disponible")
-    origin = info.get("origen", "No disponible")
-    description = info.get("descripcion", "Información no disponible.")
-    traits = info.get("rasgos", [])
-    uses = info.get("usos", [])
-    recommendation = info.get(
-        "recomendacion_foto",
-        "Toma una foto nítida de hojas, flores, frutos o tronco.",
-    )
-    note = info.get("nota", "")
+    if not info:
+        st.warning("No hay información botánica registrada para esta especie.")
+        return
 
-    conf_html = ""
-    if confidence is not None:
-        conf_html = f"<span class='badge'>Confianza: {confidence * 100:.2f}%</span>"
-
+    st.markdown('<div class="green-card">', unsafe_allow_html=True)
     st.markdown(
         f"""
-        <div class="info-card">
-            <h3>🌿 {display_name}</h3>
-            {conf_html}
-            <p><b>Nombre científico:</b> <i>{scientific}</i></p>
-            <p><b>Familia:</b> {family}</p>
-            <p><b>Origen/distribución:</b> {origin}</p>
-            <p>{description}</p>
-        </div>
+        <div class="species-title">{info.get("nombre_comun", nombre_limpio(nombre_modelo))}</div>
+        <div class="scientific-name">{info.get("nombre_cientifico", "Nombre científico no registrado")}</div>
         """,
         unsafe_allow_html=True,
     )
 
-    if traits:
-        st.markdown("**Rasgos útiles para reconocerla:**")
-        for trait in traits:
-            st.markdown(f"- {trait}")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Familia</div>
+                <div class="metric-value">{info.get("familia", "No registrada")}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Origen</div>
+                <div class="metric-value">{info.get("origen", "No registrado")}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Altura</div>
+                <div class="metric-value">{info.get("altura_max_m", "No registrada")}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    if uses:
-        st.markdown("**Usos o importancia:**")
-        for use in uses:
-            st.markdown(f"- {use}")
+    st.markdown("#### 🌱 Hábitat")
+    st.write(info.get("habitat", "No registrado."))
 
-    st.info(f"📷 {recommendation}")
+    st.markdown("#### 🐦 Importancia para el ecosistema")
+    st.write(info.get("importancia_ecosistemica", "No registrada."))
 
-    if note:
-        st.caption(f"Nota: {note}")
+    st.markdown("#### 🔎 Rasgos para identificarla")
+    st.write(info.get("rasgos_identificacion", "No registrados."))
+
+    datos_clave = info.get("datos_clave", [])
+    if datos_clave:
+        st.markdown("#### 📌 Datos clave")
+        for dato in datos_clave:
+            st.markdown(f"- {dato}")
+
+    recomendacion = info.get("recomendacion_foto")
+    if recomendacion:
+        st.info(f"📷 Consejo para mejorar la predicción: {recomendacion}")
+
+    if mostrar_boton_quiz:
+        if st.button("🧠 Hacer quiz sobre esta especie", key=f"quiz_btn_{nombre_modelo}"):
+            st.session_state["quiz_species"] = nombre_modelo
+            st.session_state["quiz_items"] = generar_quiz(nombre_modelo)
+            st.session_state["show_quiz_after_prediction"] = True
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-def build_report(predictions: pd.DataFrame) -> dict[str, Any]:
-    best = predictions.iloc[0].to_dict()
-    return {
-        "fecha": datetime.now().isoformat(timespec="seconds"),
-        "modelo": "modelo_arboles.onnx",
-        "prediccion_principal": best,
-        "top_predicciones": predictions.to_dict(orient="records"),
-        "nota": "Resultado generado por un prototipo de clasificación de imágenes. Validar con criterio botánico.",
+def mostrar_resultados(resultados):
+    principal = resultados[0]
+    especie = principal["clase"]
+    confianza = principal["probabilidad"]
+
+    st.markdown("### Resultado principal")
+
+    c1, c2 = st.columns([1.25, 1])
+    with c1:
+        st.success(f"🌳 Especie predicha: **{principal['nombre']}**")
+        st.write(f"Confianza del modelo: **{confianza:.2%}**")
+        st.progress(confianza)
+
+        if confianza < 0.50:
+            st.warning(
+                "La confianza es baja. Intenta con una foto más clara de hojas, flores, frutos "
+                "o una vista completa del árbol."
+            )
+        elif confianza < 0.75:
+            st.info(
+                "La predicción es razonable, pero conviene validar con rasgos botánicos de la especie."
+            )
+
+    with c2:
+        info = obtener_info(especie)
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-label">Nombre científico</div>
+                <div class="metric-value"><i>{info.get("nombre_cientifico", "No registrado")}</i></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("### Top 5 predicciones")
+    for item in resultados:
+        st.write(f"**{item['nombre']}** — {item['probabilidad']:.2%}")
+        st.progress(item["probabilidad"])
+
+    st.markdown("### Información de la especie")
+    mostrar_info_especie(especie, mostrar_boton_quiz=True)
+
+    resultado_json = {
+        "prediccion_principal": principal,
+        "top_predicciones": resultados,
+        "info_especie": obtener_info(especie),
     }
+
+    st.download_button(
+        label="⬇️ Descargar resultado en JSON",
+        data=json.dumps(resultado_json, ensure_ascii=False, indent=2),
+        file_name=f"resultado_{especie}.json",
+        mime="application/json",
+    )
+
+
+# =====================================================
+# Quiz
+# =====================================================
+
+def tomar_distractores(campo: str, especie_correcta: str, n: int = 3):
+    valores = []
+    for especie, info in species_info.items():
+        if especie == especie_correcta:
+            continue
+        valor = info.get(campo)
+        if valor and valor not in valores:
+            valores.append(valor)
+
+    random.shuffle(valores)
+    return valores[:n]
+
+
+def crear_pregunta(especie: str, texto: str, campo: str):
+    info = obtener_info(especie)
+    respuesta = info.get(campo)
+
+    distractores = tomar_distractores(campo, especie, n=3)
+    opciones = [respuesta] + distractores
+    opciones = [op for op in opciones if op]
+
+    # Evita preguntas incompletas si faltara un dato.
+    if len(opciones) < 2 or not respuesta:
+        return None
+
+    opciones = list(dict.fromkeys(opciones))
+    random.shuffle(opciones)
+
+    return {
+        "pregunta": texto,
+        "opciones": opciones,
+        "respuesta": respuesta,
+    }
+
+
+def generar_quiz(especie: str):
+    nombre = obtener_info(especie).get("nombre_comun", nombre_limpio(especie))
+
+    plantillas = [
+        (
+            f"¿Cuál es el nombre científico de {nombre}?",
+            "nombre_cientifico",
+        ),
+        (
+            f"¿De dónde es originaria la especie {nombre}?",
+            "origen",
+        ),
+        (
+            f"¿Cuánto puede crecer aproximadamente {nombre}?",
+            "altura_max_m",
+        ),
+        (
+            f"¿Cuál es una importancia ecológica de {nombre}?",
+            "importancia_ecosistemica",
+        ),
+        (
+            f"¿Qué rasgo ayuda a identificar {nombre}?",
+            "rasgos_identificacion",
+        ),
+    ]
+
+    preguntas = []
+    for texto, campo in plantillas:
+        pregunta = crear_pregunta(especie, texto, campo)
+        if pregunta:
+            preguntas.append(pregunta)
+
+    return preguntas
+
+
+def render_quiz(especie: str):
+    info = obtener_info(especie)
+    nombre = info.get("nombre_comun", nombre_limpio(especie))
+
+    st.markdown(f"## 🧠 Quiz: {nombre}")
+    st.write(
+        "Responde con base en la información de la especie. "
+        "El objetivo es practicar identificación, origen, crecimiento e importancia ecológica."
+    )
+
+    if "quiz_items" not in st.session_state or st.session_state.get("quiz_species") != especie:
+        st.session_state["quiz_species"] = especie
+        st.session_state["quiz_items"] = generar_quiz(especie)
+
+    preguntas = st.session_state["quiz_items"]
+
+    if not preguntas:
+        st.warning("No hay suficientes datos para generar el quiz de esta especie.")
+        return
+
+    with st.form(key=f"quiz_form_{especie}"):
+        respuestas_usuario = []
+        for i, item in enumerate(preguntas, 1):
+            st.markdown('<div class="quiz-question">', unsafe_allow_html=True)
+            st.markdown(f"**Pregunta {i}. {item['pregunta']}**")
+            respuesta = st.radio(
+                "Selecciona una respuesta:",
+                item["opciones"],
+                key=f"quiz_{especie}_{i}",
+                label_visibility="collapsed",
+            )
+            respuestas_usuario.append(respuesta)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        enviado = st.form_submit_button("✅ Calificar quiz")
+
+    if enviado:
+        correctas = 0
+        st.markdown("### Retroalimentación")
+
+        for i, (item, respuesta_usuario) in enumerate(zip(preguntas, respuestas_usuario), 1):
+            es_correcta = respuesta_usuario == item["respuesta"]
+            correctas += int(es_correcta)
+
+            if es_correcta:
+                st.success(f"Pregunta {i}: correcta ✅")
+            else:
+                st.error(
+                    f"Pregunta {i}: incorrecta ❌\n\n"
+                    f"Tu respuesta: {respuesta_usuario}\n\n"
+                    f"Respuesta correcta: {item['respuesta']}"
+                )
+
+        puntaje = correctas / len(preguntas)
+        st.markdown(f"## Puntaje: {correctas}/{len(preguntas)} — {puntaje:.0%}")
+        st.progress(puntaje)
+
+        if puntaje >= 0.8:
+            st.balloons()
+            st.success("Muy bien. Ya reconoces los datos principales de esta especie.")
+        elif puntaje >= 0.6:
+            st.info("Buen avance. Revisa nuevamente los datos de origen, altura e importancia ecológica.")
+        else:
+            st.warning("Conviene leer otra vez la ficha de la especie y repetir el quiz.")
+
+    if st.button("🔄 Generar nuevo quiz", key=f"new_quiz_{especie}"):
+        st.session_state["quiz_items"] = generar_quiz(especie)
+        st.rerun()
 
 
 # =====================================================
 # Sidebar
 # =====================================================
 
-try:
-    labels = load_labels()
-except Exception as exc:
-    st.error(str(exc))
-    st.stop()
-
 with st.sidebar:
-    st.title("🌳 TreeLens")
-    st.caption("Clasificador de especies de árboles")
+    st.markdown("## 🌳 TreeLens")
+    st.write("Clasificador de especies de árboles con modelo ONNX.")
+    st.markdown("---")
+    st.markdown("### Especies del modelo")
+    for clase in class_names:
+        info = obtener_info(clase)
+        etiqueta = info.get("nombre_comun", nombre_limpio(clase))
+        st.markdown(f"- {etiqueta}")
 
-    top_k = st.slider(
-        "Número de predicciones",
-        min_value=3,
-        max_value=min(10, len(labels)),
-        value=min(5, len(labels)),
-    )
-
-    confidence_threshold = st.slider(
-        "Umbral de advertencia",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.50,
-        step=0.05,
-    )
-
-    st.divider()
-    st.markdown("**Modelo**")
-    st.write("ONNX Runtime · CPU")
-    st.write(f"Entrada: {IMAGE_SIZE} × {IMAGE_SIZE}")
-    st.write(f"Clases: {len(labels)}")
-
-    st.divider()
+    st.markdown("---")
     st.caption(
-        "Recomendación: usa fotos nítidas, con buena luz y donde se vean hojas, flores, frutos o tronco."
+        "La predicción es una ayuda automática. Para decisiones académicas o técnicas, "
+        "valida con rasgos botánicos y fuentes especializadas."
     )
 
 
 # =====================================================
-# App principal
+# Interfaz principal
 # =====================================================
 
 st.markdown(
     """
-    <div class="hero">
-        <h1>🌳 TreeLens: identificación visual de árboles</h1>
-        <p class="small-muted">
-        Sube una imagen o toma una foto desde la cámara. La app usa tu modelo ONNX para estimar la especie y mostrar información botánica básica.
+    <div class="hero-card">
+        <h1>🌳 TreeLens: clasificador de árboles</h1>
+        <p>
+        Sube una imagen o toma una foto. La app identifica la especie probable,
+        muestra información botánica y genera un quiz para practicar lo aprendido.
         </p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-main_tab, catalog_tab, about_tab = st.tabs(
-    ["🔎 Clasificar", "📚 Catálogo", "ℹ️ Acerca del modelo"]
+tab_clasificar, tab_catalogo, tab_quiz = st.tabs(
+    ["📷 Clasificar", "📚 Catálogo de especies", "🧠 Quiz"]
 )
 
-with main_tab:
-    left, right = st.columns([1, 1], gap="large")
+with tab_clasificar:
+    st.markdown("## 📷 Clasificar una imagen")
 
-    with left:
-        st.subheader("1. Ingresa una imagen")
-        input_mode = st.radio(
-            "Modo de entrada",
-            ["Subir imagen", "Tomar foto"],
-            horizontal=True,
-            label_visibility="collapsed",
+    modo = st.radio(
+        "Selecciona la entrada de imagen:",
+        ["Subir imagen", "Tomar foto"],
+        horizontal=True,
+    )
+
+    archivo = None
+    if modo == "Subir imagen":
+        archivo = st.file_uploader(
+            "Sube una imagen del árbol, hoja, flor, fruto o tronco",
+            type=["jpg", "jpeg", "png"],
         )
+    else:
+        archivo = st.camera_input("Toma una foto")
 
-        image_file = None
-        if input_mode == "Subir imagen":
-            image_file = st.file_uploader(
-                "Sube una imagen JPG, JPEG o PNG",
-                type=["jpg", "jpeg", "png"],
-            )
-        else:
-            image_file = st.camera_input("Toma una foto del árbol, hoja, flor o fruto")
+    if archivo is not None:
+        image = Image.open(archivo).convert("RGB")
 
-        image = None
-        if image_file is not None:
-            image = Image.open(image_file)
-            image = ImageOps.exif_transpose(image).convert("RGB")
+        col_img, col_info = st.columns([1, 1.15])
+        with col_img:
             st.image(image, caption="Imagen analizada", use_container_width=True)
 
-    with right:
-        st.subheader("2. Resultado")
+        with col_info:
+            with st.spinner("Analizando imagen..."):
+                resultados = predecir(image, top_k=min(5, len(class_names)))
+            mostrar_resultados(resultados)
 
-        if image is None:
-            st.markdown(
-                """
-                <div class="warning-box">
-                Sube una imagen o toma una foto para ejecutar la clasificación.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            try:
-                with st.spinner("Analizando imagen..."):
-                    predictions = predict(image, top_k=top_k)
-            except Exception as exc:
-                st.error(f"No fue posible ejecutar la predicción: {exc}")
-                st.stop()
+        if st.session_state.get("show_quiz_after_prediction"):
+            st.markdown("---")
+            render_quiz(st.session_state["quiz_species"])
 
-            best = predictions.iloc[0]
-            level, message = confidence_message(float(best["probabilidad"]))
-
-            st.metric(
-                label="Predicción principal",
-                value=str(best["especie"]),
-                delta=f"{best['porcentaje']:.2f}% · Confianza {level}",
-            )
-            st.caption(message)
-
-            if float(best["probabilidad"]) < confidence_threshold:
-                st.warning(
-                    "La confianza está por debajo del umbral seleccionado. Prueba con otra foto que muestre mejor hojas, flores, frutos o tronco."
-                )
-
-            st.markdown("### Top predicciones")
-            for i, row in predictions.iterrows():
-                st.markdown(
-                    f"""
-                    <div class="pred-card">
-                        <b>{i + 1}. {row['especie']}</b><br>
-                        <span class="small-muted">Probabilidad: {row['porcentaje']:.2f}%</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                st.progress(float(row["probabilidad"]))
-
-            st.markdown("### Información de la especie más probable")
-            show_species_card(str(best["clase"]), float(best["probabilidad"]))
-
-            report = build_report(predictions)
-            st.download_button(
-                "Descargar resultado en JSON",
-                data=json.dumps(report, ensure_ascii=False, indent=2),
-                file_name="resultado_treelens.json",
-                mime="application/json",
-            )
-
-with catalog_tab:
-    st.subheader("Catálogo de especies incluidas")
-    species_info = load_species_info()
-
-    selected = st.selectbox(
-        "Selecciona una especie",
-        labels,
-        format_func=normalize_label,
-    )
-    show_species_card(selected)
-
-    st.markdown("### Tabla resumen")
-    table_rows = []
-    for label in labels:
-        info = species_info.get(label, {})
-        table_rows.append(
-            {
-                "Clase": label,
-                "Nombre común": info.get("nombre_comun", normalize_label(label)),
-                "Nombre científico": info.get("nombre_cientifico", ""),
-                "Familia": info.get("familia", ""),
-                "Origen/distribución": info.get("origen", ""),
-            }
+    else:
+        st.info(
+            "Carga una imagen para iniciar. Para mejores resultados usa fotos claras, "
+            "con buena luz y donde se vean hojas, flores, frutos o la forma general del árbol."
         )
 
-    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+with tab_catalogo:
+    st.markdown("## 📚 Catálogo de especies")
 
-with about_tab:
-    st.subheader("Acerca de esta app")
-    st.markdown(
-        """
-        Esta aplicación ejecuta un modelo de clasificación de imágenes convertido a ONNX.  
-        El flujo de inferencia es:
-
-        1. Convertir la imagen a RGB.
-        2. Redimensionar a 224 × 224 píxeles.
-        3. Normalizar con media y desviación estándar de ImageNet.
-        4. Ejecutar el modelo ONNX con ONNX Runtime.
-        5. Aplicar softmax y mostrar las clases más probables.
-        """
+    especie_catalogo = st.selectbox(
+        "Selecciona una especie para consultar su ficha:",
+        class_names,
+        format_func=lambda x: obtener_info(x).get("nombre_comun", nombre_limpio(x)),
     )
 
-    st.warning(
-        "Esta app es una ayuda académica y de prototipo. No debe usarse como identificación botánica definitiva sin validación experta."
+    mostrar_info_especie(especie_catalogo, mostrar_boton_quiz=False)
+
+with tab_quiz:
+    st.markdown("## 🧠 Practica con un quiz")
+
+    especie_quiz = st.selectbox(
+        "Escoge la especie que quieres estudiar:",
+        class_names,
+        format_func=lambda x: obtener_info(x).get("nombre_comun", nombre_limpio(x)),
+        key="quiz_selector",
     )
 
-    st.markdown("### Estructura esperada para despliegue")
-    st.code(
-        """.
-├── app/
-│   └── app.py
-├── models/
-│   ├── modelo_arboles.onnx
-│   └── clases.json
-├── data/
-│   └── species_info.json
-├── requirements.txt
-└── .streamlit/
-    └── config.toml
-""",
-        language="text",
-    )
+    col_a, col_b = st.columns([1, 2])
+    with col_a:
+        if st.button("🧪 Crear quiz", key="crear_quiz_tab"):
+            st.session_state["quiz_species"] = especie_quiz
+            st.session_state["quiz_items"] = generar_quiz(especie_quiz)
+
+    with col_b:
+        st.markdown(
+            '<p class="small-note">El quiz usa la ficha botánica: nombre científico, origen, altura, rasgos e importancia ecológica.</p>',
+            unsafe_allow_html=True,
+        )
+
+    render_quiz(especie_quiz)

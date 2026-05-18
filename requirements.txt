@@ -1,6 +1,7 @@
-pytest
-faker
-tqdm
+streamlit
+torch
+torchvision
+Pillow
 numpy
 pandas
 scikit-learn

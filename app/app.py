@@ -12,8 +12,6 @@ from PIL import Image
 # Rutas del proyecto
 # =====================================================
 
-# app.py está dentro de la carpeta app/
-# Por eso usamos parent.parent para llegar a la raíz del proyecto
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 MODEL_PATH = BASE_DIR / "models" / "modelo_arboles.pth"
@@ -51,14 +49,19 @@ if not CLASSES_PATH.exists():
 # =====================================================
 
 with open(CLASSES_PATH, "r", encoding="utf-8") as f:
-    class_names = json.load(f)
+    raw_classes = json.load(f)
+
+# clases.json viene como diccionario: {"0": "aguacate", ...}
+if isinstance(raw_classes, dict):
+    class_names = [raw_classes[str(i)] for i in range(len(raw_classes))]
+else:
+    class_names = raw_classes
 
 num_classes = len(class_names)
 
 
 # =====================================================
-# Transformación de la imagen
-# Debe ser igual o muy parecida a la usada en entrenamiento
+# Transformación de imagen
 # =====================================================
 
 transform = transforms.Compose([
@@ -72,19 +75,33 @@ transform = transforms.Compose([
 
 
 # =====================================================
+# Arquitectura usada en entrenamiento
+# =====================================================
+
+class TreeResNet18(nn.Module):
+    def __init__(self, num_classes: int):
+        super().__init__()
+
+        # weights=None para evitar descargar pesos en Streamlit Cloud
+        self.model = models.resnet18(weights=None)
+
+        in_features = self.model.fc.in_features
+        self.model.fc = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(in_features, num_classes)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+# =====================================================
 # Cargar modelo
 # =====================================================
 
 @st.cache_resource
 def load_model():
-    model = models.resnet18(weights=None)
-
-    in_features = model.fc.in_features
-
-    model.fc = nn.Sequential(
-        nn.Dropout(0.3),
-        nn.Linear(in_features, num_classes)
-    )
+    model = TreeResNet18(num_classes)
 
     checkpoint = torch.load(MODEL_PATH, map_location=device)
 
@@ -93,9 +110,9 @@ def load_model():
     else:
         state_dict = checkpoint
 
-    # Corrige nombres si el modelo fue entrenado con DataParallel
+    # Solo quitar "module." si fue entrenado con DataParallel.
+    # NO quitar "model.", porque tu arquitectura lo necesita.
     new_state_dict = {}
-
     for key, value in state_dict.items():
         new_key = key.replace("module.", "")
         new_state_dict[new_key] = value

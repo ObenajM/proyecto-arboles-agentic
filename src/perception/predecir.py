@@ -13,7 +13,7 @@ importlib.reload(modelo)
 from modelo import crear_modelo
 
 
-MODELO_PATH = "modelo_arboles.pth"
+MODELO_PATH = "/content/drive/MyDrive/modelo_arboles_best.pth"
 INFO_PATH = "info.json"
 IMG_SIZE = 224
 
@@ -103,15 +103,14 @@ def predecir(ruta_imagen, modelo, clases, img_size, info, device, top_k=3):
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    print("\n🌿 Sistema de Clasificación de Árboles — Arboretum UNAL Medellín")
+    print("\n🌿 Sistema de Clasificación de Árboles")
     print(f"🖥️ Dispositivo: {device}")
-    print("Cargando modelo...")
+    print("Cargando mejor modelo...")
 
     modelo, clases, img_size = cargar_modelo(MODELO_PATH, device)
     info = cargar_info(INFO_PATH)
 
-    print(f"✅ Modelo cargado con {len(clases)} especies:")
-    print(clases)
+    print(f"✅ Modelo cargado con {len(clases)} especies")
 
     if args.imagen:
         ruta_imagen = args.imagen
@@ -137,5 +136,5 @@ if __name__ == "__main__":
     parser.add_argument("--imagen", type=str, default=None)
     parser.add_argument("--top", type=int, default=3)
 
-    args = parser.parse_args([])  # útil en Colab/Jupyter
+    args = parser.parse_args([])  # Colab/Jupyter
     main(args)

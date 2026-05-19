@@ -15,11 +15,12 @@ importlib.reload(modelo)
 from modelo import crear_modelo
 
 
-# Ruta del dataset en Google Drive
 DATASET_DIR = "/content/drive/MyDrive/dataset"
 
-MODELO_SALIDA = "modelo_arboles.pth"
-CLASES_JSON = "clases.json"
+BEST_MODEL = "/content/drive/MyDrive/modelo_arboles_best.pth"
+LAST_CHECKPOINT = "/content/drive/MyDrive/checkpoint_last.pth"
+CLASES_JSON = "/content/drive/MyDrive/clases.json"
+
 IMG_SIZE = 224
 VAL_SPLIT = 0.2
 
@@ -29,10 +30,10 @@ def get_transforms(img_size):
     std_dev = [0.229, 0.224, 0.225]
 
     train_tf = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
+        transforms.RandomResizedCrop(img_size, scale=(0.75, 1.0)),
         transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(10),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25),
         transforms.ToTensor(),
         transforms.Normalize(media, std_dev),
     ])
@@ -46,18 +47,6 @@ def get_transforms(img_size):
     return train_tf, val_tf
 
 
-def contar_imagenes_por_clase(dataset_dir):
-    print("\n📊 Imágenes por clase:")
-    for clase in sorted(os.listdir(dataset_dir)):
-        ruta = os.path.join(dataset_dir, clase)
-        if os.path.isdir(ruta):
-            n = len([
-                f for f in os.listdir(ruta)
-                if f.lower().endswith((".jpg", ".jpeg", ".png"))
-            ])
-            print(f"   {clase}: {n}")
-
-
 def cargar_datasets(dataset_dir, img_size, val_split, batch_size):
     train_tf, val_tf = get_transforms(img_size)
 
@@ -66,9 +55,6 @@ def cargar_datasets(dataset_dir, img_size, val_split, batch_size):
 
     clases = dataset_train_full.classes
     n_total = len(dataset_train_full)
-
-    if n_total == 0:
-        raise ValueError("El dataset está vacío.")
 
     n_val = int(n_total * val_split)
     n_train = n_total - n_val
@@ -105,21 +91,40 @@ def cargar_datasets(dataset_dir, img_size, val_split, batch_size):
     return train_loader, val_loader, clases
 
 
+def contar_imagenes_por_clase(dataset_dir):
+    total = 0
+    print("\n📊 Imágenes por clase:")
+
+    for clase in sorted(os.listdir(dataset_dir)):
+        ruta = os.path.join(dataset_dir, clase)
+
+        if os.path.isdir(ruta):
+            imagenes = [
+                f for f in os.listdir(ruta)
+                if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+            ]
+            total += len(imagenes)
+            print(f"   {clase}: {len(imagenes)}")
+
+    print(f"\n🖼️ Total de imágenes: {total}")
+
+
 def entrenar_una_epoca(modelo, loader, criterio, optimizador, device):
     modelo.train()
+
     total_loss = 0.0
     correctos = 0
     total = 0
 
-    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
+    scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda"))
 
     for imagenes, etiquetas in loader:
         imagenes = imagenes.to(device, non_blocking=True)
         etiquetas = etiquetas.to(device, non_blocking=True)
 
-        optimizador.zero_grad()
+        optimizador.zero_grad(set_to_none=True)
 
-        with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
+        with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
             salidas = modelo(imagenes)
             loss = criterio(salidas, etiquetas)
 
@@ -137,6 +142,7 @@ def entrenar_una_epoca(modelo, loader, criterio, optimizador, device):
 
 def validar(modelo, loader, criterio, device):
     modelo.eval()
+
     total_loss = 0.0
     correctos = 0
     total = 0
@@ -146,7 +152,7 @@ def validar(modelo, loader, criterio, device):
             imagenes = imagenes.to(device, non_blocking=True)
             etiquetas = etiquetas.to(device, non_blocking=True)
 
-            with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
+            with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
                 salidas = modelo(imagenes)
                 loss = criterio(salidas, etiquetas)
 
@@ -158,11 +164,37 @@ def validar(modelo, loader, criterio, device):
     return total_loss / total, correctos / total
 
 
+def guardar_checkpoint(epoca, modelo, optimizador, scheduler, clases, num_clases, val_acc):
+    torch.save({
+        "epoch": epoca,
+        "model_state_dict": modelo.state_dict(),
+        "optimizer_state_dict": optimizador.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict(),
+        "clases": clases,
+        "num_clases": num_clases,
+        "img_size": IMG_SIZE,
+        "val_acc": val_acc,
+        "arquitectura": "ConvNeXt-Tiny",
+    }, LAST_CHECKPOINT)
+
+
+def guardar_mejor_modelo(epoca, modelo, clases, num_clases, val_acc):
+    torch.save({
+        "epoch": epoca,
+        "model_state_dict": modelo.state_dict(),
+        "clases": clases,
+        "num_clases": num_clases,
+        "img_size": IMG_SIZE,
+        "val_acc": val_acc,
+        "arquitectura": "ConvNeXt-Tiny",
+    }, BEST_MODEL)
+
+
 def main(args):
     torch.backends.cudnn.benchmark = True
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f" Dispositivo: {device}")
+    print(f"🖥️ Dispositivo: {device}")
 
     if not os.path.isdir(DATASET_DIR):
         raise FileNotFoundError(
@@ -171,8 +203,6 @@ def main(args):
         )
 
     contar_imagenes_por_clase(DATASET_DIR)
-
-    print(f"\n📂 Cargando dataset desde '{DATASET_DIR}'...")
 
     train_loader, val_loader, clases = cargar_datasets(
         DATASET_DIR,
@@ -183,38 +213,49 @@ def main(args):
 
     num_clases = len(clases)
 
-    print(f"\n {num_clases} especies encontradas:")
-    for i, clase in enumerate(clases):
-        print(f"   {i}: {clase}")
-
-    print(f"\nTrain: {len(train_loader.dataset)} imágenes")
+    print(f"\n✅ {num_clases} especies encontradas")
+    print(f"Train: {len(train_loader.dataset)} imágenes")
     print(f"Val:   {len(val_loader.dataset)} imágenes")
 
     with open(CLASES_JSON, "w", encoding="utf-8") as f:
         json.dump({str(i): c for i, c in enumerate(clases)}, f, ensure_ascii=False, indent=2)
 
-    print(f"\n Mapeo de clases guardado en '{CLASES_JSON}'")
-
     modelo = crear_modelo(num_clases, device)
 
     criterio = nn.CrossEntropyLoss()
-    optimizador = optim.Adam(
+
+    optimizador = optim.AdamW(
         modelo.parameters(),
         lr=args.lr,
-        weight_decay=1e-4
+        weight_decay=1e-3
     )
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizador,
-        patience=3,
+        patience=4,
         factor=0.5
     )
 
-    print(f"\n Entrenando por {args.epocas} épocas...\n")
-
+    start_epoch = 1
     mejor_val_acc = 0.0
 
-    for epoca in range(1, args.epocas + 1):
+    if os.path.isfile(LAST_CHECKPOINT):
+        print(f"\n🔄 Checkpoint encontrado: {LAST_CHECKPOINT}")
+
+        checkpoint = torch.load(LAST_CHECKPOINT, map_location=device)
+
+        modelo.load_state_dict(checkpoint["model_state_dict"])
+        optimizador.load_state_dict(checkpoint["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
+        start_epoch = checkpoint["epoch"] + 1
+        mejor_val_acc = checkpoint.get("val_acc", 0.0)
+
+        print(f"✅ Continuando desde época {start_epoch}")
+
+    print(f"\n🚀 Entrenando desde época {start_epoch} hasta {args.epocas}\n")
+
+    for epoca in range(start_epoch, args.epocas + 1):
         t0 = time.time()
 
         train_loss, train_acc = entrenar_una_epoca(
@@ -233,33 +274,35 @@ def main(args):
             f"Época {epoca:02d}/{args.epocas} | "
             f"Train Loss: {train_loss:.4f} Acc: {train_acc:.3f} | "
             f"Val Loss: {val_loss:.4f} Acc: {val_acc:.3f} | "
-            f" {duracion:.1f}s"
+            f"⏱ {duracion:.1f}s"
         )
+
+        guardar_checkpoint(
+            epoca, modelo, optimizador, scheduler, clases, num_clases, val_acc
+        )
+
+        print("   💾 checkpoint_last.pth actualizado")
 
         if val_acc > mejor_val_acc:
             mejor_val_acc = val_acc
 
-            torch.save({
-                "epoch": epoca,
-                "model_state_dict": modelo.state_dict(),
-                "clases": clases,
-                "num_clases": num_clases,
-                "img_size": IMG_SIZE,
-                "val_acc": val_acc,
-            }, MODELO_SALIDA)
+            guardar_mejor_modelo(
+                epoca, modelo, clases, num_clases, val_acc
+            )
 
-            print(f"    Mejor modelo guardado con val_acc={val_acc:.4f}")
+            print(f"   ⭐ Mejor modelo guardado con val_acc={val_acc:.4f}")
 
-    print(f"\n Entrenamiento completo.")
+    print("\n✅ Entrenamiento completo.")
     print(f"Mejor val_acc: {mejor_val_acc:.4f}")
-    print(f"Modelo guardado en '{MODELO_SALIDA}'")
+    print(f"Mejor modelo: {BEST_MODEL}")
+    print(f"Último checkpoint: {LAST_CHECKPOINT}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epocas", type=int, default=30)
-    parser.add_argument("--lr", type=float, default=3e-4)
-    parser.add_argument("--batch", type=int, default=64)
+    parser.add_argument("--epocas", type=int, default=50)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--batch", type=int, default=32)
 
-    args = parser.parse_args([])  # útil en Colab/Jupyter
+    args = parser.parse_args([])  # Colab/Jupyter
     main(args)

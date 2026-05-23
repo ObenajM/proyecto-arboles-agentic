@@ -1,686 +1,745 @@
-from pathlib import Path
+"""
+app/app.py — TreeLens: Identificador de Especies Arbóreas
+Interfaz Streamlit con ONNX Runtime para el Arboretum y Palmetum de la UNAL Medellín.
+"""
+
+from __future__ import annotations
+
 import json
 import random
+from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
 import streamlit as st
 from PIL import Image, ImageOps
 
+# =============================================================================
+# Paths & constants
+# =============================================================================
 
-# =====================================================
-# Rutas del proyecto
-# =====================================================
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-MODEL_PATH = BASE_DIR / "models" / "modelo_arboles.onnx"
+BASE_DIR     = Path(__file__).resolve().parent.parent
+MODEL_PATH   = BASE_DIR / "models" / "modelo_arboles_best.onnx"
 CLASSES_PATH = BASE_DIR / "models" / "clases.json"
-INFO_PATH = BASE_DIR / "data" / "species_info.json"
-
-
-# =====================================================
-# Configuración general
-# =====================================================
+INFO_PATH    = BASE_DIR / "data"   / "species_info.json"
 
 IMAGE_SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+TOP_K = 3
+
+# =============================================================================
+# Page config  (must come before any other st.* call)
+# =============================================================================
 
 st.set_page_config(
-    page_title="TreeLens | Clasificador de árboles",
+    page_title="TreeLens | Árboles UNAL Medellín",
     page_icon="🌳",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+# =============================================================================
+# Global CSS
+# =============================================================================
 
-# =====================================================
-# Estilos visuales
-# =====================================================
+st.markdown(
+    """
+    <style>
+    /* ── Variables ──────────────────────────────────────────────────── */
+    :root {
+        --g900: #071a0b;
+        --g800: #0f2d18;
+        --g700: #1B5E20;
+        --g600: #2E7D32;
+        --g500: #388E3C;
+        --g400: #66BB6A;
+        --g200: #C8E6C9;
+        --g100: #E8F5E9;
+        --g50:  #F1F8E9;
+        --bg:   #F8FFF6;
+        --text: #1C1C1C;
+        --muted: #4B6050;
+        --radius-lg: 20px;
+        --radius-md: 14px;
+        --radius-sm: 10px;
+        --shadow-sm: 0 2px 8px rgba(27,94,32,.08);
+        --shadow-md: 0 6px 20px rgba(27,94,32,.12);
+    }
 
-def aplicar_estilos():
-    st.markdown(
-        """
-        <style>
-        :root {
-            --green-dark: #123524;
-            --green-main: #1B5E20;
-            --green-soft: #E8F5E9;
-            --green-card: #F1F8E9;
-            --green-line: #A5D6A7;
-            --text-main: #1B1B1B;
-        }
+    /* ── Base ───────────────────────────────────────────────────────── */
+    .stApp { background: var(--bg); }
+    h1, h2, h3 { color: var(--g800); }
 
-        .stApp {
-            background:
-                radial-gradient(circle at top left, rgba(129, 199, 132, 0.28), transparent 28%),
-                linear-gradient(180deg, #FBFFF9 0%, #F4FBF2 100%);
-        }
+    /* ── Hero banner ────────────────────────────────────────────────── */
+    .hero {
+        background: linear-gradient(135deg, #071a0b 0%, #1B5E20 50%, #2E7D32 100%);
+        border-radius: var(--radius-lg);
+        padding: 2rem 2.5rem;
+        margin-bottom: 1.75rem;
+        box-shadow: 0 10px 36px rgba(7,26,11,.30);
+    }
+    .hero h1 { color: #ffffff !important; font-size: 1.95rem; margin-bottom: .35rem; }
+    .hero p  { color: #A5D6A7; font-size: 1rem; margin: 0; line-height: 1.55; }
 
-        h1, h2, h3 {
-            color: var(--green-dark);
-        }
+    /* ── Prediction card — main ─────────────────────────────────────── */
+    .pred-main {
+        background: linear-gradient(145deg, #dff3df, #f1f8e9);
+        border: 2px solid var(--g400);
+        border-radius: var(--radius-lg);
+        padding: 1.25rem 1.5rem;
+        margin-bottom: .9rem;
+        box-shadow: var(--shadow-md);
+    }
+    .pred-badge {
+        display: inline-block;
+        background: var(--g600);
+        color: #fff;
+        font-size: .68rem;
+        font-weight: 700;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        margin-bottom: .55rem;
+    }
+    .pred-name-main {
+        font-size: 1.55rem;
+        font-weight: 800;
+        color: var(--g800);
+        line-height: 1.2;
+        margin-bottom: .2rem;
+    }
+    .pred-sci { font-style: italic; color: var(--g600); font-size: .95rem; margin-bottom: .4rem; }
+    .pred-conf-main { font-size: .9rem; color: var(--muted); }
 
-        .hero-card {
-            padding: 1.4rem 1.6rem;
-            border-radius: 24px;
-            background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 52%, #66BB6A 100%);
-            color: white;
-            box-shadow: 0 12px 30px rgba(27, 94, 32, 0.20);
-            margin-bottom: 1rem;
-        }
+    /* ── Prediction card — alternative ─────────────────────────────── */
+    .pred-alt {
+        background: #ffffff;
+        border: 1px solid var(--g200);
+        border-radius: var(--radius-md);
+        padding: .8rem 1.1rem;
+        margin-bottom: .45rem;
+        box-shadow: var(--shadow-sm);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .pred-alt-rank {
+        font-size: .7rem;
+        font-weight: 700;
+        color: var(--g500);
+        text-transform: uppercase;
+        letter-spacing: .07em;
+        min-width: 1.5rem;
+    }
+    .pred-alt-name { font-size: 1rem; font-weight: 700; color: var(--g700); flex: 1; }
+    .pred-alt-conf { font-size: .9rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 
-        .hero-card h1 {
-            color: white;
-            margin-bottom: 0.2rem;
-        }
+    /* ── Species info card ──────────────────────────────────────────── */
+    .info-card {
+        background: #ffffff;
+        border: 1px solid var(--g200);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem 1.75rem;
+        box-shadow: var(--shadow-md);
+        margin-top: .5rem;
+    }
+    .info-card h3 { color: var(--g800); font-size: 1.3rem; margin-bottom: .1rem; }
+    .info-sci { font-style: italic; color: var(--g600); font-size: .97rem; margin-bottom: .85rem; }
 
-        .hero-card p {
-            color: #F1F8E9;
-            font-size: 1.05rem;
-            margin-bottom: 0;
-        }
+    .pills { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .9rem; }
+    .pill {
+        background: var(--g50);
+        border: 1px solid var(--g200);
+        border-radius: 999px;
+        padding: .22rem .75rem;
+        font-size: .82rem;
+        color: var(--g700);
+    }
+    .pill b { color: var(--g800); }
 
-        .green-card {
-            padding: 1.15rem 1.25rem;
-            border-radius: 20px;
-            border: 1px solid var(--green-line);
-            background: rgba(241, 248, 233, 0.90);
-            box-shadow: 0 8px 22px rgba(27, 94, 32, 0.08);
-            margin-bottom: 1rem;
-        }
+    .section-lbl {
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .09em;
+        color: var(--g500);
+        margin: .85rem 0 .25rem;
+    }
 
-        .metric-card {
-            padding: 1rem;
-            border-radius: 18px;
-            background: white;
-            border: 1px solid #C8E6C9;
-            text-align: center;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.04);
-        }
+    /* ── Banners ────────────────────────────────────────────────────── */
+    .banner-warn {
+        background: #fffce5;
+        border-left: 4px solid #f9a825;
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        padding: .65rem .95rem;
+        font-size: .88rem;
+        color: #5d4037;
+        margin: .5rem 0;
+    }
+    .banner-tip {
+        background: #e3f2fd;
+        border-left: 4px solid #1e88e5;
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        padding: .65rem .95rem;
+        font-size: .88rem;
+        color: #1a237e;
+        margin: .5rem 0;
+    }
 
-        .metric-label {
-            font-size: 0.82rem;
-            color: #4B604D;
-            margin-bottom: 0.25rem;
-        }
+    /* ── Quiz card ──────────────────────────────────────────────────── */
+    .quiz-card {
+        background: #ffffff;
+        border: 1px solid var(--g200);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem 1.75rem;
+        box-shadow: var(--shadow-md);
+    }
+    .quiz-q {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--g800);
+        line-height: 1.45;
+        margin-bottom: .9rem;
+    }
+    .score-bar {
+        display: inline-flex;
+        align-items: center;
+        gap: .6rem;
+        background: var(--g50);
+        border: 1px solid var(--g200);
+        border-radius: var(--radius-md);
+        padding: .45rem 1rem;
+        font-size: .9rem;
+        color: var(--g700);
+        margin-top: 1rem;
+    }
+    .score-bar b { color: var(--g800); }
 
-        .metric-value {
-            font-size: 1.15rem;
-            font-weight: 700;
-            color: #1B5E20;
-        }
+    /* ── Streamlit overrides ────────────────────────────────────────── */
+    div.stButton > button {
+        border-radius: 999px;
+        background: var(--g600);
+        border: none;
+        color: #ffffff;
+        font-weight: 700;
+        padding: .45rem 1.15rem;
+        transition: background .15s;
+    }
+    div.stButton > button:hover { background: var(--g700) !important; color: #fff; }
+    .stProgress > div > div > div > div { background: var(--g500); }
+    section[data-testid="stSidebar"] { background: var(--g50); }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-        .species-title {
-            font-size: 1.6rem;
-            font-weight: 800;
-            color: #123524;
-            margin-bottom: 0.1rem;
-        }
+# =============================================================================
+# Cached loaders
+# =============================================================================
 
-        .scientific-name {
-            font-style: italic;
-            color: #2E7D32;
-            font-size: 1.05rem;
-            margin-bottom: 1rem;
-        }
-
-        .pill {
-            display: inline-block;
-            padding: 0.25rem 0.65rem;
-            border-radius: 999px;
-            background: #C8E6C9;
-            color: #1B5E20;
-            font-weight: 600;
-            font-size: 0.82rem;
-            margin: 0.15rem 0.25rem 0.15rem 0;
-        }
-
-        div.stButton > button {
-            border-radius: 999px;
-            border: 1px solid #2E7D32;
-            background: #2E7D32;
-            color: white;
-            font-weight: 700;
-            padding: 0.55rem 1rem;
-        }
-
-        div.stButton > button:hover {
-            border: 1px solid #1B5E20;
-            background: #1B5E20;
-            color: white;
-        }
-
-        .stProgress > div > div > div > div {
-            background-color: #2E7D32;
-        }
-
-        section[data-testid="stSidebar"] {
-            background: #F1F8E9;
-        }
-
-        .small-note {
-            color: #4B604D;
-            font-size: 0.9rem;
-        }
-
-        .quiz-question {
-            padding: 1rem;
-            border-radius: 16px;
-            border: 1px solid #C8E6C9;
-            background: white;
-            margin-bottom: 1rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-aplicar_estilos()
-
-
-# =====================================================
-# Utilidades de carga
-# =====================================================
 
 @st.cache_data
-def cargar_clases():
+def load_classes() -> list[str]:
     if not CLASSES_PATH.exists():
-        st.error(f"No se encontró el archivo de clases en: {CLASSES_PATH}")
+        st.error(f"Archivo de clases no encontrado: `{CLASSES_PATH}`")
         st.stop()
-
     with open(CLASSES_PATH, "r", encoding="utf-8") as f:
-        raw_classes = json.load(f)
-
-    if isinstance(raw_classes, dict):
-        return [raw_classes[str(i)] for i in range(len(raw_classes))]
-
-    return raw_classes
+        raw = json.load(f)
+    if isinstance(raw, dict):
+        return [raw[str(i)] for i in range(len(raw))]
+    return list(raw)
 
 
 @st.cache_data
-def cargar_info_especies():
+def load_species_info() -> dict:
     if not INFO_PATH.exists():
         return {}
-
     with open(INFO_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 @st.cache_resource
-def cargar_modelo():
+def load_model():
     if not MODEL_PATH.exists():
-        st.error(f"No se encontró el modelo ONNX en: {MODEL_PATH}")
+        st.error(f"Modelo ONNX no encontrado: `{MODEL_PATH}`")
         st.stop()
-
-    session = ort.InferenceSession(
-        str(MODEL_PATH),
-        providers=["CPUExecutionProvider"],
-    )
-    input_name = session.get_inputs()[0].name
-    output_name = session.get_outputs()[0].name
-    return session, input_name, output_name
+    sess = ort.InferenceSession(str(MODEL_PATH), providers=["CPUExecutionProvider"])
+    return sess, sess.get_inputs()[0].name, sess.get_outputs()[0].name
 
 
-class_names = cargar_clases()
-species_info = cargar_info_especies()
-session, input_name, output_name = cargar_modelo()
+class_names  = load_classes()
+species_info = load_species_info()
+ort_sess, inp_name, out_name = load_model()
+
+# =============================================================================
+# Core helpers
+# =============================================================================
 
 
-# =====================================================
-# Procesamiento e inferencia
-# =====================================================
-
-def nombre_limpio(nombre: str) -> str:
-    return nombre.replace("_", " ").title()
+def clean_name(key: str) -> str:
+    """ceiba_roja → Ceiba Roja"""
+    return key.replace("_", " ").title()
 
 
-def obtener_info(nombre: str) -> dict:
-    return species_info.get(nombre, species_info.get(nombre.lower(), {}))
+def get_info(key: str) -> dict:
+    """Return species info dict, tolerating case/key mismatches."""
+    return species_info.get(key) or species_info.get(key.lower()) or {}
 
 
-def preprocesar_imagen(image: Image.Image) -> np.ndarray:
-    image = image.convert("RGB")
-
-    # Se usa Resize directo porque el entrenamiento reportado usaba Resize((224, 224)).
-    image = ImageOps.fit(
-        image,
-        (IMAGE_SIZE, IMAGE_SIZE),
-        method=Image.Resampling.BILINEAR,
-    )
-
-    array = np.asarray(image).astype(np.float32) / 255.0
-    array = (array - MEAN) / STD
-    array = np.transpose(array, (2, 0, 1))
-    array = np.expand_dims(array, axis=0)
-
-    return array.astype(np.float32)
+def preprocess(image: Image.Image) -> np.ndarray:
+    img = image.convert("RGB")
+    img = ImageOps.fit(img, (IMAGE_SIZE, IMAGE_SIZE), method=Image.Resampling.BILINEAR)
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    arr = (arr - MEAN) / STD
+    return np.transpose(arr, (2, 0, 1))[np.newaxis].astype(np.float32)
 
 
-def softmax(logits: np.ndarray) -> np.ndarray:
-    logits = logits - np.max(logits)
-    exp_values = np.exp(logits)
-    return exp_values / np.sum(exp_values)
+def softmax(x: np.ndarray) -> np.ndarray:
+    e = np.exp(x - x.max())
+    return e / e.sum()
 
 
-def predecir(image: Image.Image, top_k: int = 5):
-    input_array = preprocesar_imagen(image)
-    outputs = session.run([output_name], {input_name: input_array})
-    logits = outputs[0][0]
-    probabilities = softmax(logits)
-
-    top_indices = probabilities.argsort()[::-1][:top_k]
-
-    resultados = []
-    for idx in top_indices:
-        resultados.append(
-            {
-                "id": int(idx),
-                "clase": class_names[int(idx)],
-                "nombre": nombre_limpio(class_names[int(idx)]),
-                "probabilidad": float(probabilities[int(idx)]),
-            }
-        )
-
-    return resultados
+def run_inference(image: Image.Image, top_k: int = TOP_K) -> list[dict]:
+    logits = ort_sess.run([out_name], {inp_name: preprocess(image)})[0][0]
+    probs  = softmax(logits)
+    idx    = probs.argsort()[::-1][:top_k]
+    return [
+        {"key": class_names[int(i)], "name": clean_name(class_names[int(i)]), "prob": float(probs[int(i)])}
+        for i in idx
+    ]
 
 
-# =====================================================
-# Componentes visuales
-# =====================================================
+# =============================================================================
+# UI — prediction results
+# =============================================================================
 
-def mostrar_info_especie(nombre_modelo: str, mostrar_boton_quiz: bool = True):
-    info = obtener_info(nombre_modelo)
 
-    if not info:
-        st.warning("No hay información botánica registrada para esta especie.")
+def render_predictions(results: list[dict]) -> None:
+    if not results:
+        st.warning("No se obtuvieron predicciones.")
         return
 
-    st.markdown('<div class="green-card">', unsafe_allow_html=True)
+    top  = results[0]
+    conf = top["prob"]
+    sci  = get_info(top["key"]).get("nombre_cientifico", "")
+
     st.markdown(
         f"""
-        <div class="species-title">{info.get("nombre_comun", nombre_limpio(nombre_modelo))}</div>
-        <div class="scientific-name">{info.get("nombre_cientifico", "Nombre científico no registrado")}</div>
+        <div class="pred-main">
+            <div class="pred-badge">🥇 Especie más probable</div>
+            <div class="pred-name-main">{top['name']}</div>
+            {'<div class="pred-sci">' + sci + '</div>' if sci else ''}
+            <div class="pred-conf-main">Confianza: <strong>{conf:.1%}</strong></div>
+        </div>
         """,
         unsafe_allow_html=True,
     )
+    st.progress(conf)
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
+    if conf < 0.50:
         st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Familia</div>
-                <div class="metric-value">{info.get("familia", "No registrada")}</div>
-            </div>
-            """,
+            '<div class="banner-warn">⚠️ Confianza baja. Intenta con una foto más nítida '
+            "donde se vean bien las hojas, flores, frutos o la silueta completa del árbol.</div>",
             unsafe_allow_html=True,
         )
-    with c2:
+    elif conf < 0.75:
         st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Origen</div>
-                <div class="metric-value">{info.get("origen", "No registrado")}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with c3:
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Altura</div>
-                <div class="metric-value">{info.get("altura_max_m", "No registrada")}</div>
-            </div>
-            """,
+            '<div class="banner-tip">💡 Confianza moderada. Verifica los rasgos botánicos '
+            "de la especie antes de concluir.</div>",
             unsafe_allow_html=True,
         )
 
-    st.markdown("#### 🌱 Hábitat")
-    st.write(info.get("habitat", "No registrado."))
+    if len(results) > 1:
+        st.markdown("**Otras posibilidades:**")
+        medals = ["🥈", "🥉"]
+        for i, item in enumerate(results[1:], start=0):
+            medal = medals[i] if i < len(medals) else f"#{i + 2}"
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.markdown(
+                    f'<div class="pred-alt"><span class="pred-alt-rank">{medal}</span>'
+                    f'<span class="pred-alt-name">{item["name"]}</span></div>',
+                    unsafe_allow_html=True,
+                )
+                st.progress(item["prob"])
+            with c2:
+                st.markdown(
+                    f"<div style='padding-top:.3rem;font-size:.92rem;"
+                    f"font-weight:600;color:var(--muted,#4B6050);'>{item['prob']:.1%}</div>",
+                    unsafe_allow_html=True,
+                )
 
-    st.markdown("#### 🐦 Importancia para el ecosistema")
-    st.write(info.get("importancia_ecosistemica", "No registrada."))
 
-    st.markdown("#### 🔎 Rasgos para identificarla")
-    st.write(info.get("rasgos_identificacion", "No registrados."))
+# =============================================================================
+# UI — species info card
+# =============================================================================
 
-    datos_clave = info.get("datos_clave", [])
-    if datos_clave:
-        st.markdown("#### 📌 Datos clave")
-        for dato in datos_clave:
+
+def render_species_card(key: str) -> None:
+    info        = get_info(key)
+    common_name = info.get("nombre_comun") or clean_name(key)
+    scientific  = info.get("nombre_cientifico", "")
+
+    st.markdown('<div class="info-card">', unsafe_allow_html=True)
+    st.markdown(f"### 🌿 {common_name}")
+    if scientific:
+        st.markdown(f'<div class="info-sci">{scientific}</div>', unsafe_allow_html=True)
+
+    if not info:
+        st.markdown(
+            '<div class="banner-tip">ℹ️ No hay información botánica registrada para esta especie.</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    # Quick-fact pills
+    pill_defs = [
+        ("familia",      "🏷️ Familia"),
+        ("origen",       "🌍 Origen"),
+        ("altura_max_m", "📏 Altura"),
+    ]
+    pills = [
+        f"<span class='pill'>{label}: <b>{info[field]}</b></span>"
+        for field, label in pill_defs
+        if info.get(field)
+    ]
+    if pills:
+        st.markdown(f"<div class='pills'>{''.join(pills)}</div>", unsafe_allow_html=True)
+
+    # Narrative sections
+    for field, label in [
+        ("habitat",                 "🌱 Hábitat"),
+        ("importancia_ecosistemica","🐦 Importancia ecológica"),
+        ("rasgos_identificacion",   "🔎 Cómo identificarla"),
+    ]:
+        if info.get(field):
+            st.markdown(f'<div class="section-lbl">{label}</div>', unsafe_allow_html=True)
+            st.write(info[field])
+
+    if info.get("datos_clave"):
+        st.markdown('<div class="section-lbl">📌 Datos clave</div>', unsafe_allow_html=True)
+        for dato in info["datos_clave"]:
             st.markdown(f"- {dato}")
 
-    recomendacion = info.get("recomendacion_foto")
-    if recomendacion:
-        st.info(f"📷 Consejo para mejorar la predicción: {recomendacion}")
-
-    if mostrar_boton_quiz:
-        if st.button("🧠 Hacer quiz sobre esta especie", key=f"quiz_btn_{nombre_modelo}"):
-            st.session_state["quiz_species"] = nombre_modelo
-            st.session_state["quiz_items"] = generar_quiz(nombre_modelo)
-            st.session_state["show_quiz_after_prediction"] = True
+    if info.get("recomendacion_foto"):
+        st.markdown(
+            f'<div class="banner-tip">📷 {info["recomendacion_foto"]}</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def mostrar_resultados(resultados):
-    principal = resultados[0]
-    especie = principal["clase"]
-    confianza = principal["probabilidad"]
+# =============================================================================
+# Trivia engine
+# =============================================================================
 
-    st.markdown("### Resultado principal")
-
-    c1, c2 = st.columns([1.25, 1])
-    with c1:
-        st.success(f"🌳 Especie predicha: **{principal['nombre']}**")
-        st.write(f"Confianza del modelo: **{confianza:.2%}**")
-        st.progress(confianza)
-
-        if confianza < 0.50:
-            st.warning(
-                "La confianza es baja. Intenta con una foto más clara de hojas, flores, frutos "
-                "o una vista completa del árbol."
-            )
-        elif confianza < 0.75:
-            st.info(
-                "La predicción es razonable, pero conviene validar con rasgos botánicos de la especie."
-            )
-
-    with c2:
-        info = obtener_info(especie)
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Nombre científico</div>
-                <div class="metric-value"><i>{info.get("nombre_cientifico", "No registrado")}</i></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("### Top 5 predicciones")
-    for item in resultados:
-        st.write(f"**{item['nombre']}** — {item['probabilidad']:.2%}")
-        st.progress(item["probabilidad"])
-
-    st.markdown("### Información de la especie")
-    mostrar_info_especie(especie, mostrar_boton_quiz=True)
-
-    resultado_json = {
-        "prediccion_principal": principal,
-        "top_predicciones": resultados,
-        "info_especie": obtener_info(especie),
-    }
-
-    st.download_button(
-        label="⬇️ Descargar resultado en JSON",
-        data=json.dumps(resultado_json, ensure_ascii=False, indent=2),
-        file_name=f"resultado_{especie}.json",
-        mime="application/json",
-    )
+_TRIVIA_TEMPLATES: list[tuple[str, str]] = [
+    ("nombre_cientifico",        "¿Cuál es el nombre científico de {n}?"),
+    ("origen",                   "¿De dónde es originaria la especie {n}?"),
+    ("familia",                  "¿A qué familia botánica pertenece {n}?"),
+    ("altura_max_m",             "¿Cuánto puede llegar a medir {n}?"),
+    ("importancia_ecosistemica", "¿Cuál es una función ecológica importante de {n}?"),
+    ("rasgos_identificacion",    "¿Qué rasgo visual ayuda a identificar {n}?"),
+]
 
 
-# =====================================================
-# Quiz
-# =====================================================
-
-def tomar_distractores(campo: str, especie_correcta: str, n: int = 3):
-    valores = []
-    for especie, info in species_info.items():
-        if especie == especie_correcta:
+def _pick_distractors(field: str, exclude_key: str, n: int = 3) -> list[str]:
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for sp_key, sp_info in species_info.items():
+        if sp_key == exclude_key:
             continue
-        valor = info.get(campo)
-        if valor and valor not in valores:
-            valores.append(valor)
+        val = sp_info.get(field)
+        if val and val not in seen:
+            seen.add(val)
+            candidates.append(val)
+    random.shuffle(candidates)
+    return candidates[:n]
 
-    random.shuffle(valores)
-    return valores[:n]
 
-
-def crear_pregunta(especie: str, texto: str, campo: str):
-    info = obtener_info(especie)
-    respuesta = info.get(campo)
-
-    distractores = tomar_distractores(campo, especie, n=3)
-    opciones = [respuesta] + distractores
-    opciones = [op for op in opciones if op]
-
-    # Evita preguntas incompletas si faltara un dato.
-    if len(opciones) < 2 or not respuesta:
+def build_question(species_key: str) -> dict | None:
+    info = get_info(species_key)
+    if not info:
         return None
+    nombre = info.get("nombre_comun") or clean_name(species_key)
 
-    opciones = list(dict.fromkeys(opciones))
-    random.shuffle(opciones)
+    templates = _TRIVIA_TEMPLATES.copy()
+    random.shuffle(templates)
 
-    return {
-        "pregunta": texto,
-        "opciones": opciones,
-        "respuesta": respuesta,
-    }
-
-
-def generar_quiz(especie: str):
-    nombre = obtener_info(especie).get("nombre_comun", nombre_limpio(especie))
-
-    plantillas = [
-        (
-            f"¿Cuál es el nombre científico de {nombre}?",
-            "nombre_cientifico",
-        ),
-        (
-            f"¿De dónde es originaria la especie {nombre}?",
-            "origen",
-        ),
-        (
-            f"¿Cuánto puede crecer aproximadamente {nombre}?",
-            "altura_max_m",
-        ),
-        (
-            f"¿Cuál es una importancia ecológica de {nombre}?",
-            "importancia_ecosistemica",
-        ),
-        (
-            f"¿Qué rasgo ayuda a identificar {nombre}?",
-            "rasgos_identificacion",
-        ),
-    ]
-
-    preguntas = []
-    for texto, campo in plantillas:
-        pregunta = crear_pregunta(especie, texto, campo)
-        if pregunta:
-            preguntas.append(pregunta)
-
-    return preguntas
+    for field, template in templates:
+        answer = info.get(field)
+        if not answer:
+            continue
+        distractors = _pick_distractors(field, species_key, n=3)
+        if len(distractors) < 2:
+            continue
+        options = list(dict.fromkeys([answer] + distractors))
+        random.shuffle(options)
+        return {
+            "question": template.format(n=nombre),
+            "options":  options,
+            "answer":   answer,
+        }
+    return None
 
 
-def render_quiz(especie: str):
-    info = obtener_info(especie)
-    nombre = info.get("nombre_comun", nombre_limpio(especie))
+def render_trivia(species_key: str) -> None:
+    """
+    Stateful single-question trivia widget.
+    Uses a counter (tv_ctr) as part of widget keys so that every new question
+    creates fresh radio/button widgets, resetting any prior selection.
+    """
+    # Session-state keys (short, collision-safe)
+    QK    = "tv_q"       # current question dict
+    SPK   = "tv_sp"      # species the question belongs to
+    STK   = "tv_st"      # "ask" | "fb" (feedback)
+    SELK  = "tv_sel"     # user's selected answer
+    SCRK  = "tv_score"
+    TOTK  = "tv_total"
+    CTRK  = "tv_ctr"     # monotonic counter → unique widget keys per question
 
-    st.markdown(f"## 🧠 Quiz: {nombre}")
-    st.write(
-        "Responde con base en la información de la especie. "
-        "El objetivo es practicar identificación, origen, crecimiento e importancia ecológica."
-    )
+    for key, default in [(SCRK, 0), (TOTK, 0), (CTRK, 0), (STK, "ask")]:
+        if key not in st.session_state:
+            st.session_state[key] = default
 
-    if "quiz_items" not in st.session_state or st.session_state.get("quiz_species") != especie:
-        st.session_state["quiz_species"] = especie
-        st.session_state["quiz_items"] = generar_quiz(especie)
+    # Auto-generate question when species changes or on first visit
+    if QK not in st.session_state or st.session_state.get(SPK) != species_key:
+        st.session_state[SPK]  = species_key
+        st.session_state[QK]   = build_question(species_key)
+        st.session_state[STK]  = "ask"
+        st.session_state[SELK] = None
+        st.session_state[CTRK] += 1
 
-    preguntas = st.session_state["quiz_items"]
-
-    if not preguntas:
-        st.warning("No hay suficientes datos para generar el quiz de esta especie.")
+    q = st.session_state[QK]
+    if q is None:
+        st.warning("No hay suficientes datos para generar preguntas de esta especie.")
         return
 
-    with st.form(key=f"quiz_form_{especie}"):
-        respuestas_usuario = []
-        for i, item in enumerate(preguntas, 1):
-            st.markdown('<div class="quiz-question">', unsafe_allow_html=True)
-            st.markdown(f"**Pregunta {i}. {item['pregunta']}**")
-            respuesta = st.radio(
-                "Selecciona una respuesta:",
-                item["opciones"],
-                key=f"quiz_{especie}_{i}",
-                label_visibility="collapsed",
-            )
-            respuestas_usuario.append(respuesta)
-            st.markdown("</div>", unsafe_allow_html=True)
+    ctr = st.session_state[CTRK]
 
-        enviado = st.form_submit_button("✅ Calificar quiz")
+    st.markdown('<div class="quiz-card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="quiz-q">🧠 {q["question"]}</div>', unsafe_allow_html=True)
 
-    if enviado:
-        correctas = 0
-        st.markdown("### Retroalimentación")
+    if st.session_state[STK] == "ask":
+        choice = st.radio(
+            "Elige tu respuesta:",
+            q["options"],
+            key=f"tv_radio_{ctr}",
+            label_visibility="collapsed",
+        )
+        if st.button("✅ Confirmar respuesta", key=f"tv_confirm_{ctr}"):
+            st.session_state[SELK] = choice
+            st.session_state[TOTK] += 1
+            if choice == q["answer"]:
+                st.session_state[SCRK] += 1
+            st.session_state[STK] = "fb"
+            st.rerun()
 
-        for i, (item, respuesta_usuario) in enumerate(zip(preguntas, respuestas_usuario), 1):
-            es_correcta = respuesta_usuario == item["respuesta"]
-            correctas += int(es_correcta)
-
-            if es_correcta:
-                st.success(f"Pregunta {i}: correcta ✅")
+    else:  # feedback state
+        chosen  = st.session_state.get(SELK)
+        correct = (chosen == q["answer"])
+        for opt in q["options"]:
+            if opt == q["answer"]:
+                st.success(f"✅ {opt}")
+            elif opt == chosen:
+                st.error(f"❌ {opt}")
             else:
-                st.error(
-                    f"Pregunta {i}: incorrecta ❌\n\n"
-                    f"Tu respuesta: {respuesta_usuario}\n\n"
-                    f"Respuesta correcta: {item['respuesta']}"
-                )
+                st.write(f"   {opt}")
 
-        puntaje = correctas / len(preguntas)
-        st.markdown(f"## Puntaje: {correctas}/{len(preguntas)} — {puntaje:.0%}")
-        st.progress(puntaje)
-
-        if puntaje >= 0.8:
-            st.balloons()
-            st.success("Muy bien. Ya reconoces los datos principales de esta especie.")
-        elif puntaje >= 0.6:
-            st.info("Buen avance. Revisa nuevamente los datos de origen, altura e importancia ecológica.")
+        if correct:
+            st.success("**¡Correcto!**")
         else:
-            st.warning("Conviene leer otra vez la ficha de la especie y repetir el quiz.")
+            st.error(f"**Incorrecto.** La respuesta era: **{q['answer']}**")
 
-    if st.button("🔄 Generar nuevo quiz", key=f"new_quiz_{especie}"):
-        st.session_state["quiz_items"] = generar_quiz(especie)
-        st.rerun()
+        if st.button("➡️ Siguiente pregunta", key=f"tv_next_{ctr}"):
+            st.session_state[QK]   = build_question(species_key)
+            st.session_state[STK]  = "ask"
+            st.session_state[SELK] = None
+            st.session_state[CTRK] += 1
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Score display
+    score = st.session_state[SCRK]
+    total = st.session_state[TOTK]
+    if total > 0:
+        pct = score / total
+        st.markdown(
+            f"<div class='score-bar'>🏆 Puntaje: <b>{score}/{total}</b>&nbsp;—&nbsp;{pct:.0%}</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("🔄 Reiniciar puntaje", key="tv_reset"):
+            st.session_state[SCRK] = 0
+            st.session_state[TOTK] = 0
+            st.rerun()
 
 
-# =====================================================
+# =============================================================================
 # Sidebar
-# =====================================================
+# =============================================================================
 
 with st.sidebar:
     st.markdown("## 🌳 TreeLens")
-    st.write("Clasificador de especies de árboles con modelo ONNX.")
+    st.write("Identificador de especies arbóreas para el Arboretum y Palmetum de la UNAL Medellín.")
+    st.markdown(f"**Modelo:** {len(class_names)} especies")
     st.markdown("---")
-    st.markdown("### Especies del modelo")
-    for clase in class_names:
-        info = obtener_info(clase)
-        etiqueta = info.get("nombre_comun", nombre_limpio(clase))
-        st.markdown(f"- {etiqueta}")
+
+    if species_info:
+        st.markdown("### Especies del modelo")
+        for k in class_names[:18]:
+            label = get_info(k).get("nombre_comun") or clean_name(k)
+            st.caption(f"• {label}")
+        if len(class_names) > 18:
+            st.caption(f"… y {len(class_names) - 18} más — ver en **Explorar**")
+    else:
+        st.caption("Información botánica no disponible (`data/species_info.json`).")
 
     st.markdown("---")
     st.caption(
-        "La predicción es una ayuda automática. Para decisiones académicas o técnicas, "
-        "valida con rasgos botánicos y fuentes especializadas."
+        "Este clasificador es una herramienta de apoyo. "
+        "Para identificaciones definitivas consulta un especialista en botánica."
     )
 
 
-# =====================================================
-# Interfaz principal
-# =====================================================
+# =============================================================================
+# Hero banner
+# =============================================================================
 
 st.markdown(
     """
-    <div class="hero-card">
-        <h1>🌳 TreeLens: clasificador de árboles</h1>
+    <div class="hero">
+        <h1>🌳 TreeLens: Identificador de Especies Arbóreas</h1>
         <p>
-        Sube una imagen o toma una foto. La app identifica la especie probable,
-        muestra información botánica y genera un quiz para practicar lo aprendido.
+        Sistema de identificación para el <strong>Arboretum y Palmetum de la Universidad Nacional
+        de Colombia, sede Medellín</strong>. Carga una imagen o toma una foto con la cámara y
+        el modelo reconocerá la especie más probable junto con su información botánica.
         </p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-tab_clasificar, tab_catalogo, tab_quiz = st.tabs(
-    ["📷 Clasificar", "📚 Catálogo de especies", "🧠 Quiz"]
+
+# =============================================================================
+# Tabs
+# =============================================================================
+
+tab_classify, tab_catalog, tab_trivia = st.tabs(
+    ["📷 Clasificar", "📚 Explorar especies", "🧠 Trivia botánica"]
 )
 
-with tab_clasificar:
-    st.markdown("## 📷 Clasificar una imagen")
+# ── Tab 1: Classify ───────────────────────────────────────────────────────────
 
-    modo = st.radio(
-        "Selecciona la entrada de imagen:",
-        ["Subir imagen", "Tomar foto"],
+with tab_classify:
+    st.markdown("## Identificar una imagen")
+    st.markdown(
+        "Sube una fotografía o usa la cámara. Para mejores resultados elige imágenes nítidas "
+        "donde se aprecien bien las hojas, flores, frutos o la silueta completa del árbol."
+    )
+
+    mode = st.radio(
+        "Fuente de imagen:",
+        ["📁 Subir desde el computador", "📷 Tomar foto con la cámara"],
         horizontal=True,
     )
 
-    archivo = None
-    if modo == "Subir imagen":
-        archivo = st.file_uploader(
-            "Sube una imagen del árbol, hoja, flor, fruto o tronco",
+    uploaded_file = None
+    if mode == "📁 Subir desde el computador":
+        uploaded_file = st.file_uploader(
+            "Selecciona una imagen (JPG, PNG)",
             type=["jpg", "jpeg", "png"],
         )
     else:
-        archivo = st.camera_input("Toma una foto")
+        uploaded_file = st.camera_input("Captura una foto")
 
-    if archivo is not None:
-        image = Image.open(archivo).convert("RGB")
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file).convert("RGB")
+        col_img, col_res = st.columns([1, 1.4], gap="large")
 
-        col_img, col_info = st.columns([1, 1.15])
         with col_img:
-            st.image(image, caption="Imagen analizada", use_container_width=True)
+            st.image(image, caption="Imagen cargada", use_container_width=True)
 
-        with col_info:
-            with st.spinner("Analizando imagen..."):
-                resultados = predecir(image, top_k=min(5, len(class_names)))
-            mostrar_resultados(resultados)
+        with col_res:
+            with st.spinner("🔍 Analizando imagen…"):
+                results = run_inference(image, top_k=min(TOP_K, len(class_names)))
+            render_predictions(results)
 
-        if st.session_state.get("show_quiz_after_prediction"):
-            st.markdown("---")
-            render_quiz(st.session_state["quiz_species"])
+        st.markdown("---")
+        st.markdown("### Información de la especie identificada")
+        render_species_card(results[0]["key"])
 
     else:
-        st.info(
-            "Carga una imagen para iniciar. Para mejores resultados usa fotos claras, "
-            "con buena luz y donde se vean hojas, flores, frutos o la forma general del árbol."
+        st.info("📸 Carga una imagen para iniciar la identificación.")
+
+# ── Tab 2: Catalog ────────────────────────────────────────────────────────────
+
+with tab_catalog:
+    st.markdown("## Catálogo de especies")
+
+    if not species_info:
+        st.warning(
+            "No se encontró el archivo `data/species_info.json`. "
+            "El catálogo botánico no está disponible en este momento."
         )
-
-with tab_catalogo:
-    st.markdown("## 📚 Catálogo de especies")
-
-    especie_catalogo = st.selectbox(
-        "Selecciona una especie para consultar su ficha:",
-        class_names,
-        format_func=lambda x: obtener_info(x).get("nombre_comun", nombre_limpio(x)),
-    )
-
-    mostrar_info_especie(especie_catalogo, mostrar_boton_quiz=False)
-
-with tab_quiz:
-    st.markdown("## 🧠 Practica con un quiz")
-
-    especie_quiz = st.selectbox(
-        "Escoge la especie que quieres estudiar:",
-        class_names,
-        format_func=lambda x: obtener_info(x).get("nombre_comun", nombre_limpio(x)),
-        key="quiz_selector",
-    )
-
-    col_a, col_b = st.columns([1, 2])
-    with col_a:
-        if st.button("🧪 Crear quiz", key="crear_quiz_tab"):
-            st.session_state["quiz_species"] = especie_quiz
-            st.session_state["quiz_items"] = generar_quiz(especie_quiz)
-
-    with col_b:
+    else:
         st.markdown(
-            '<p class="small-note">El quiz usa la ficha botánica: nombre científico, origen, altura, rasgos e importancia ecológica.</p>',
-            unsafe_allow_html=True,
+            "Consulta la ficha botánica de cualquier especie del modelo. "
+            "Escribe el nombre en el selector para buscar rápidamente."
         )
+        selected = st.selectbox(
+            "Selecciona una especie:",
+            class_names,
+            format_func=lambda k: (get_info(k).get("nombre_comun") or clean_name(k))
+            + f"  ({clean_name(k)})",
+        )
+        render_species_card(selected)
 
-    render_quiz(especie_quiz)
+# ── Tab 3: Trivia ─────────────────────────────────────────────────────────────
+
+with tab_trivia:
+    st.markdown("## Trivia botánica")
+    st.markdown(
+        "Pon a prueba tu conocimiento sobre las especies del Arboretum y Palmetum. "
+        "Selecciona una especie o elige una al azar, responde la pregunta y avanza "
+        "acumulando puntaje."
+    )
+
+    if not species_info:
+        st.warning(
+            "No se encontró el archivo `data/species_info.json`. "
+            "La trivia no está disponible sin información botánica."
+        )
+    else:
+        valid_keys = [k for k in class_names if get_info(k)]
+
+        if not valid_keys:
+            st.warning("No hay especies con información suficiente para la trivia.")
+        else:
+            col_sel, col_rand = st.columns([3, 1], gap="medium")
+
+            with col_sel:
+                trivia_key = st.selectbox(
+                    "Especie para practicar:",
+                    valid_keys,
+                    format_func=lambda k: get_info(k).get("nombre_comun") or clean_name(k),
+                    key="trivia_selector",
+                )
+
+            with col_rand:
+                # Vertical alignment trick
+                st.markdown(
+                    "<div style='padding-top:1.75rem;'>",
+                    unsafe_allow_html=True,
+                )
+                if st.button("🎲 Aleatoria", key="trivia_random"):
+                    st.session_state["trivia_selector"] = random.choice(valid_keys)
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("---")
+            render_trivia(trivia_key)

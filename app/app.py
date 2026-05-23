@@ -253,10 +253,13 @@ def load_classes() -> list[str]:
 
 
 @st.cache_data
-def load_species_info() -> dict:
-    if not INFO_PATH.exists():
+def load_species_info(path_str: str) -> dict:
+    """Load info.json. The path is an explicit arg so it's part of the cache key,
+    preventing stale results if the path ever changes between runs."""
+    path = Path(path_str)
+    if not path.exists():
         return {}
-    with open(INFO_PATH, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -270,7 +273,7 @@ def load_model():
 
 
 class_names  = load_classes()
-species_info = load_species_info()
+species_info = load_species_info(str(INFO_PATH))
 ort_sess, inp_name, out_name = load_model()
 
 # =============================================================================
@@ -377,78 +380,110 @@ def render_predictions(results: list[dict]) -> None:
 # =============================================================================
 
 
+def _esc(text: str) -> str:
+    """Escape text before embedding in HTML to prevent injection."""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 def render_species_card(key: str) -> None:
-    info        = get_info(key)
+    """Render a full botanical info card for *key* using data from info.json.
+
+    The entire card is built as a single HTML string and emitted in one
+    st.markdown call. This is essential: Streamlit renders each st.*() call
+    as an independent React component, so mixing an opening <div> in one call
+    with st.write() calls afterwards leaves those widgets *outside* the div
+    in the DOM — CSS wrapping and the card background never apply.
+    Generating everything as one HTML block solves this completely.
+    """
+    info = get_info(key)
+
+    if not info:
+        st.info(
+            f"No se encontró información adicional para **{clean_name(key)}** "
+            "en `data/info.json`."
+        )
+        return
+
     common_name = info.get("nombre_comun") or clean_name(key)
     scientific  = info.get("nombre_cientifico", "")
 
-    st.markdown('<div class="info-card">', unsafe_allow_html=True)
-    st.markdown(f"### 🌿 {common_name}")
+    p: list[str] = ['<div class="info-card">']
+
+    # ── Header ────────────────────────────────────────────────────────────
+    p.append(
+        f'<h3 style="color:#0f2d18;margin:0 0 .2rem">🌿 {_esc(common_name)}</h3>'
+    )
     if scientific:
-        st.markdown(f'<div class="info-sci">{scientific}</div>', unsafe_allow_html=True)
+        p.append(f'<div class="info-sci">{_esc(scientific)}</div>')
 
-    if not info:
-        st.markdown(
-            '<div class="banner-tip">ℹ️ No hay información botánica registrada para esta especie.</div>',
-            unsafe_allow_html=True,
+    # ── Quick-fact pills ──────────────────────────────────────────────────
+    pills: list[str] = []
+    if info.get("familia"):
+        pills.append(
+            f"<span class='pill'>🏷️ Familia: <b>{_esc(info['familia'])}</b></span>"
         )
-        st.markdown("</div>", unsafe_allow_html=True)
-        return
-
-    # Quick-fact pills: familia + altura_aproximada
-    pill_defs = [
-        ("familia",            "🏷️ Familia"),
-        ("altura_aproximada",  "📏 Altura"),
-    ]
-    pills = [
-        f"<span class='pill'>{label}: <b>{info[field]}</b></span>"
-        for field, label in pill_defs
-        if info.get(field)
-    ]
+    if info.get("altura_aproximada"):
+        pills.append(
+            f"<span class='pill'>📏 Altura: <b>{_esc(info['altura_aproximada'])}</b></span>"
+        )
     if pills:
-        st.markdown(f"<div class='pills'>{''.join(pills)}</div>", unsafe_allow_html=True)
+        p.append(f"<div class='pills' style='margin:.65rem 0 .9rem'>{''.join(pills)}</div>")
 
-    # Description
-    if info.get("descripcion"):
-        st.markdown('<div class="section-lbl">📖 Descripción</div>', unsafe_allow_html=True)
-        st.write(info["descripcion"])
+    # ── Full-width narrative sections ─────────────────────────────────────
+    for field, icon_label in [
+        ("descripcion",        "📖 Descripción"),
+        ("como_identificarlo", "🔎 Cómo identificarlo"),
+    ]:
+        val = info.get(field)
+        if val:
+            p.append(
+                f'<div class="section-lbl">{icon_label}</div>'
+                f'<p style="margin:.15rem 0 .7rem;line-height:1.55;color:#1C1C1C">'
+                f'{_esc(val)}</p>'
+            )
 
-    # How to identify
-    if info.get("como_identificarlo"):
-        st.markdown('<div class="section-lbl">🔎 Cómo identificarlo</div>', unsafe_allow_html=True)
-        st.write(info["como_identificarlo"])
-
-    # Morphological details in two columns
-    morfo_pairs = [
-        ("hojas",  "🍃 Hojas",  "flores", "🌸 Flores"),
-        ("frutos", "🍑 Frutos", "distribucion", "🌍 Distribución"),
-    ]
-    for f1, l1, f2, l2 in morfo_pairs:
+    # ── Two-column morphological details ──────────────────────────────────
+    for (f1, l1), (f2, l2) in [
+        (("hojas",  "🍃 Hojas"),  ("flores",      "🌸 Flores")),
+        (("frutos", "🍑 Frutos"), ("distribucion", "🌍 Distribución")),
+    ]:
         v1, v2 = info.get(f1), info.get(f2)
         if v1 or v2:
-            c1, c2 = st.columns(2)
-            with c1:
-                if v1:
-                    st.markdown(f'<div class="section-lbl">{l1}</div>', unsafe_allow_html=True)
-                    st.write(v1)
-            with c2:
-                if v2:
-                    st.markdown(f'<div class="section-lbl">{l2}</div>', unsafe_allow_html=True)
-                    st.write(v2)
+            p.append('<div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin:.3rem 0 .4rem">')
+            for v, lbl in ((v1, l1), (v2, l2)):
+                if v:
+                    p.append(
+                        f'<div style="flex:1;min-width:180px">'
+                        f'<div class="section-lbl">{lbl}</div>'
+                        f'<p style="margin:.1rem 0;line-height:1.55;color:#1C1C1C">{_esc(v)}</p>'
+                        f'</div>'
+                    )
+            p.append('</div>')
 
-    # Uses
+    # ── Uses ──────────────────────────────────────────────────────────────
     if info.get("usos"):
-        st.markdown('<div class="section-lbl">🛠️ Usos</div>', unsafe_allow_html=True)
-        st.write(info["usos"])
-
-    # Fun fact
-    if info.get("dato_curioso"):
-        st.markdown(
-            f'<div class="banner-tip">💡 <strong>Dato curioso:</strong> {info["dato_curioso"]}</div>',
-            unsafe_allow_html=True,
+        p.append(
+            f'<div class="section-lbl">🛠️ Usos</div>'
+            f'<p style="margin:.15rem 0 .7rem;line-height:1.55;color:#1C1C1C">'
+            f'{_esc(info["usos"])}</p>'
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    # ── Fun fact ──────────────────────────────────────────────────────────
+    if info.get("dato_curioso"):
+        p.append(
+            f'<div class="banner-tip" style="margin-top:.5rem">'
+            f'💡 <strong>Dato curioso:</strong> {_esc(info["dato_curioso"])}'
+            f'</div>'
+        )
+
+    p.append('</div>')
+    st.markdown('\n'.join(p), unsafe_allow_html=True)
 
 
 # =============================================================================

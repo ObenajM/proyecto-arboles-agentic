@@ -1,0 +1,2 @@
+*.onnx filter=lfs diff=lfs merge=lfs -text
+modelo_arboles_best.pth filter=lfs diff=lfs merge=lfs -text

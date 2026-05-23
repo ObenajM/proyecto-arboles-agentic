@@ -21,7 +21,7 @@ from PIL import Image, ImageOps
 BASE_DIR     = Path(__file__).resolve().parent.parent
 MODEL_PATH   = BASE_DIR / "models" / "modelo_arboles_best.onnx"
 CLASSES_PATH = BASE_DIR / "models" / "clases.json"
-INFO_PATH    = BASE_DIR / "data"   / "species_info.json"
+INFO_PATH    = BASE_DIR / "data"   / "info.json"
 
 IMAGE_SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -395,11 +395,10 @@ def render_species_card(key: str) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # Quick-fact pills
+    # Quick-fact pills: familia + altura_aproximada
     pill_defs = [
-        ("familia",      "🏷️ Familia"),
-        ("origen",       "🌍 Origen"),
-        ("altura_max_m", "📏 Altura"),
+        ("familia",            "🏷️ Familia"),
+        ("altura_aproximada",  "📏 Altura"),
     ]
     pills = [
         f"<span class='pill'>{label}: <b>{info[field]}</b></span>"
@@ -409,24 +408,43 @@ def render_species_card(key: str) -> None:
     if pills:
         st.markdown(f"<div class='pills'>{''.join(pills)}</div>", unsafe_allow_html=True)
 
-    # Narrative sections
-    for field, label in [
-        ("habitat",                 "🌱 Hábitat"),
-        ("importancia_ecosistemica","🐦 Importancia ecológica"),
-        ("rasgos_identificacion",   "🔎 Cómo identificarla"),
-    ]:
-        if info.get(field):
-            st.markdown(f'<div class="section-lbl">{label}</div>', unsafe_allow_html=True)
-            st.write(info[field])
+    # Description
+    if info.get("descripcion"):
+        st.markdown('<div class="section-lbl">📖 Descripción</div>', unsafe_allow_html=True)
+        st.write(info["descripcion"])
 
-    if info.get("datos_clave"):
-        st.markdown('<div class="section-lbl">📌 Datos clave</div>', unsafe_allow_html=True)
-        for dato in info["datos_clave"]:
-            st.markdown(f"- {dato}")
+    # How to identify
+    if info.get("como_identificarlo"):
+        st.markdown('<div class="section-lbl">🔎 Cómo identificarlo</div>', unsafe_allow_html=True)
+        st.write(info["como_identificarlo"])
 
-    if info.get("recomendacion_foto"):
+    # Morphological details in two columns
+    morfo_pairs = [
+        ("hojas",  "🍃 Hojas",  "flores", "🌸 Flores"),
+        ("frutos", "🍑 Frutos", "distribucion", "🌍 Distribución"),
+    ]
+    for f1, l1, f2, l2 in morfo_pairs:
+        v1, v2 = info.get(f1), info.get(f2)
+        if v1 or v2:
+            c1, c2 = st.columns(2)
+            with c1:
+                if v1:
+                    st.markdown(f'<div class="section-lbl">{l1}</div>', unsafe_allow_html=True)
+                    st.write(v1)
+            with c2:
+                if v2:
+                    st.markdown(f'<div class="section-lbl">{l2}</div>', unsafe_allow_html=True)
+                    st.write(v2)
+
+    # Uses
+    if info.get("usos"):
+        st.markdown('<div class="section-lbl">🛠️ Usos</div>', unsafe_allow_html=True)
+        st.write(info["usos"])
+
+    # Fun fact
+    if info.get("dato_curioso"):
         st.markdown(
-            f'<div class="banner-tip">📷 {info["recomendacion_foto"]}</div>',
+            f'<div class="banner-tip">💡 <strong>Dato curioso:</strong> {info["dato_curioso"]}</div>',
             unsafe_allow_html=True,
         )
 
@@ -438,12 +456,15 @@ def render_species_card(key: str) -> None:
 # =============================================================================
 
 _TRIVIA_TEMPLATES: list[tuple[str, str]] = [
-    ("nombre_cientifico",        "¿Cuál es el nombre científico de {n}?"),
-    ("origen",                   "¿De dónde es originaria la especie {n}?"),
-    ("familia",                  "¿A qué familia botánica pertenece {n}?"),
-    ("altura_max_m",             "¿Cuánto puede llegar a medir {n}?"),
-    ("importancia_ecosistemica", "¿Cuál es una función ecológica importante de {n}?"),
-    ("rasgos_identificacion",    "¿Qué rasgo visual ayuda a identificar {n}?"),
+    ("nombre_cientifico",  "¿Cuál es el nombre científico de {n}?"),
+    ("familia",            "¿A qué familia botánica pertenece {n}?"),
+    ("altura_aproximada",  "¿Cuánto puede llegar a medir {n}?"),
+    ("usos",               "¿Para qué se usa principalmente {n}?"),
+    ("hojas",              "¿Cómo son las hojas de {n}?"),
+    ("flores",             "¿Cómo son las flores de {n}?"),
+    ("frutos",             "¿Cómo son los frutos de {n}?"),
+    ("distribucion",       "¿En qué zonas se encuentra {n}?"),
+    ("dato_curioso",       "¿Cuál es un dato curioso sobre {n}?"),
 ]
 
 
@@ -597,7 +618,7 @@ with st.sidebar:
         if len(class_names) > 18:
             st.caption(f"… y {len(class_names) - 18} más — ver en **Explorar**")
     else:
-        st.caption("Información botánica no disponible (`data/species_info.json`).")
+        st.caption("Información botánica no disponible (`data/info.json`).")
 
     st.markdown("---")
     st.caption(
@@ -683,7 +704,7 @@ with tab_catalog:
 
     if not species_info:
         st.warning(
-            "No se encontró el archivo `data/species_info.json`. "
+            "No se encontró el archivo `data/info.json`. "
             "El catálogo botánico no está disponible en este momento."
         )
     else:
@@ -711,7 +732,7 @@ with tab_trivia:
 
     if not species_info:
         st.warning(
-            "No se encontró el archivo `data/species_info.json`. "
+            "No se encontró el archivo `data/info.json`. "
             "La trivia no está disponible sin información botánica."
         )
     else:

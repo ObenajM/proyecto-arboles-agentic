@@ -1,5 +1,4 @@
 # Data
-data/*
 !data/.gitkeep
 CLAUDE.md
 # Python

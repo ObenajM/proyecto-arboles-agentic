@@ -253,9 +253,10 @@ def load_classes() -> list[str]:
 
 
 @st.cache_data
-def load_species_info(path_str: str) -> dict:
-    """Load info.json. The path is an explicit arg so it's part of the cache key,
-    preventing stale results if the path ever changes between runs."""
+def load_species_info(path_str: str, mtime: float) -> dict:
+    """Load info.json. Both path and file mtime are cache-key args so stale
+    data is evicted automatically whenever the file is updated on disk."""
+    _ = mtime  # used only as cache-key discriminator; not read inside the function
     path = Path(path_str)
     if not path.exists():
         return {}
@@ -273,7 +274,8 @@ def load_model():
 
 
 class_names  = load_classes()
-species_info = load_species_info(str(INFO_PATH))
+_info_mtime  = INFO_PATH.stat().st_mtime if INFO_PATH.exists() else 0.0
+species_info = load_species_info(str(INFO_PATH), _info_mtime)  # mtime busts cache on file change
 ort_sess, inp_name, out_name = load_model()
 
 # =============================================================================

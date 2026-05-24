@@ -482,6 +482,21 @@ def render_species_card(key: str) -> None:
             f'</div>'
         )
 
+    # ── Origin, history in Colombia and uses ──────────────────────────────
+    historia = info.get("historia_origen_colombia_usos")
+    p.append('<div class="section-lbl" style="margin-top:.85rem">🌎 Origen, historia en Colombia y usos</div>')
+    if historia:
+        p.append(
+            f'<p style="margin:.15rem 0 .7rem;line-height:1.55;color:#1C1C1C">'
+            f'{_esc(historia)}</p>'
+        )
+    else:
+        p.append(
+            '<p style="margin:.15rem 0 .7rem;font-style:italic;color:#4B6050">'
+            'Información sobre el origen, historia en Colombia y usos aún no disponible para esta especie.'
+            '</p>'
+        )
+
     p.append('</div>')
     st.markdown('\n'.join(p), unsafe_allow_html=True)
 
@@ -543,19 +558,22 @@ def build_question(species_key: str) -> dict | None:
     return None
 
 
+MAX_TRIVIA_QUESTIONS = 5
+
+
 def render_trivia(species_key: str) -> None:
     """
-    Stateful single-question trivia widget.
+    Stateful trivia widget limited to MAX_TRIVIA_QUESTIONS per round.
     Uses a counter (tv_ctr) as part of widget keys so that every new question
     creates fresh radio/button widgets, resetting any prior selection.
     """
     # Session-state keys (short, collision-safe)
     QK    = "tv_q"       # current question dict
     SPK   = "tv_sp"      # species the question belongs to
-    STK   = "tv_st"      # "ask" | "fb" (feedback)
+    STK   = "tv_st"      # "ask" | "fb" (feedback) | "done"
     SELK  = "tv_sel"     # user's selected answer
     SCRK  = "tv_score"
-    TOTK  = "tv_total"
+    TOTK  = "tv_total"   # questions answered this round
     CTRK  = "tv_ctr"     # monotonic counter → unique widget keys per question
 
     for key, default in [(SCRK, 0), (TOTK, 0), (CTRK, 0), (STK, "ask")]:
@@ -568,7 +586,37 @@ def render_trivia(species_key: str) -> None:
         st.session_state[QK]   = build_question(species_key)
         st.session_state[STK]  = "ask"
         st.session_state[SELK] = None
+        st.session_state[SCRK] = 0
+        st.session_state[TOTK] = 0
         st.session_state[CTRK] += 1
+
+    score = st.session_state[SCRK]
+    total = st.session_state[TOTK]
+
+    # ── Round complete ─────────────────────────────────────────────────────
+    if st.session_state[STK] == "done" or total >= MAX_TRIVIA_QUESTIONS:
+        pct = score / total if total else 0
+        st.markdown('<div class="quiz-card">', unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='quiz-q'>🎉 ¡Trivia completada!</div>"
+            f"<p style='color:#1C1C1C'>Respondiste <strong>{total}</strong> preguntas sobre "
+            f"<strong>{get_info(species_key).get('nombre_comun') or clean_name(species_key)}</strong>.</p>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='score-bar'>🏆 Resultado final: <b>{score}/{total}</b>&nbsp;—&nbsp;{pct:.0%}</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("🔄 Jugar de nuevo", key="tv_reset"):
+            st.session_state[SCRK] = 0
+            st.session_state[TOTK] = 0
+            st.session_state[STK]  = "ask"
+            st.session_state[QK]   = build_question(species_key)
+            st.session_state[SELK] = None
+            st.session_state[CTRK] += 1
+            st.rerun()
+        return
 
     q = st.session_state[QK]
     if q is None:
@@ -576,9 +624,13 @@ def render_trivia(species_key: str) -> None:
         return
 
     ctr = st.session_state[CTRK]
+    q_num = total + 1 if st.session_state[STK] == "ask" else total
 
     st.markdown('<div class="quiz-card">', unsafe_allow_html=True)
-    st.markdown(f'<div class="quiz-q">🧠 {q["question"]}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="quiz-q">🧠 Pregunta {q_num}/{MAX_TRIVIA_QUESTIONS} — {q["question"]}</div>',
+        unsafe_allow_html=True,
+    )
 
     if st.session_state[STK] == "ask":
         choice = st.radio(
@@ -611,28 +663,31 @@ def render_trivia(species_key: str) -> None:
         else:
             st.error(f"**Incorrecto.** La respuesta era: **{q['answer']}**")
 
-        if st.button("➡️ Siguiente pregunta", key=f"tv_next_{ctr}"):
-            st.session_state[QK]   = build_question(species_key)
-            st.session_state[STK]  = "ask"
-            st.session_state[SELK] = None
-            st.session_state[CTRK] += 1
-            st.rerun()
+        answered = st.session_state[TOTK]
+        if answered >= MAX_TRIVIA_QUESTIONS:
+            if st.button("🏁 Ver resultados", key=f"tv_finish_{ctr}"):
+                st.session_state[STK] = "done"
+                st.rerun()
+        else:
+            if st.button("➡️ Siguiente pregunta", key=f"tv_next_{ctr}"):
+                st.session_state[QK]   = build_question(species_key)
+                st.session_state[STK]  = "ask"
+                st.session_state[SELK] = None
+                st.session_state[CTRK] += 1
+                st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Score display
-    score = st.session_state[SCRK]
-    total = st.session_state[TOTK]
-    if total > 0:
-        pct = score / total
+    # Score progress during round
+    cur_score = st.session_state[SCRK]
+    cur_total = st.session_state[TOTK]
+    if cur_total > 0:
+        pct = cur_score / cur_total
         st.markdown(
-            f"<div class='score-bar'>🏆 Puntaje: <b>{score}/{total}</b>&nbsp;—&nbsp;{pct:.0%}</div>",
+            f"<div class='score-bar'>🏆 Puntaje: <b>{cur_score}/{cur_total}</b>&nbsp;—&nbsp;{pct:.0%}"
+            f"&nbsp;|&nbsp;Pregunta {cur_total}/{MAX_TRIVIA_QUESTIONS}</div>",
             unsafe_allow_html=True,
         )
-        if st.button("🔄 Reiniciar puntaje", key="tv_reset"):
-            st.session_state[SCRK] = 0
-            st.session_state[TOTK] = 0
-            st.rerun()
 
 
 # =============================================================================
@@ -723,6 +778,7 @@ with tab_classify:
         with col_res:
             with st.spinner("🔍 Analizando imagen…"):
                 results = run_inference(image, top_k=min(TOP_K, len(class_names)))
+            st.session_state["detected_species"] = results[0]["key"]
             render_predictions(results)
 
         st.markdown("---")
@@ -761,8 +817,8 @@ with tab_trivia:
     st.markdown("## Trivia botánica")
     st.markdown(
         "Pon a prueba tu conocimiento sobre las especies del Arboretum y Palmetum. "
-        "Selecciona una especie o elige una al azar, responde la pregunta y avanza "
-        "acumulando puntaje."
+        "Cada ronda tiene hasta 5 preguntas. Cuando el modelo identifica una especie, "
+        "la trivia cambia automáticamente a esa especie."
     )
 
     if not species_info:
@@ -776,26 +832,23 @@ with tab_trivia:
         if not valid_keys:
             st.warning("No hay especies con información suficiente para la trivia.")
         else:
-            col_sel, col_rand = st.columns([3, 1], gap="medium")
+            # Auto-switch to the last detected species when it changes
+            detected = st.session_state.get("detected_species")
+            last_auto = st.session_state.get("trivia_last_auto")
+            if detected and detected in valid_keys and detected != last_auto:
+                st.session_state["trivia_selector"] = detected
+                st.session_state["trivia_last_auto"] = detected
 
-            with col_sel:
-                trivia_key = st.selectbox(
-                    "Especie para practicar:",
-                    valid_keys,
-                    format_func=lambda k: get_info(k).get("nombre_comun") or clean_name(k),
-                    key="trivia_selector",
-                )
+            trivia_key = st.selectbox(
+                "Especie para practicar:",
+                valid_keys,
+                format_func=lambda k: get_info(k).get("nombre_comun") or clean_name(k),
+                key="trivia_selector",
+            )
 
-            with col_rand:
-                # Vertical alignment trick
-                st.markdown(
-                    "<div style='padding-top:1.75rem;'>",
-                    unsafe_allow_html=True,
-                )
-                if st.button("🎲 Aleatoria", key="trivia_random"):
-                    st.session_state["trivia_selector"] = random.choice(valid_keys)
-                    st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+            if detected and detected in valid_keys:
+                detected_name = get_info(detected).get("nombre_comun") or clean_name(detected)
+                st.caption(f"🔍 Especie detectada: **{detected_name}**")
 
             st.markdown("---")
             render_trivia(trivia_key)

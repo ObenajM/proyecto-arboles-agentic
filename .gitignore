@@ -16,6 +16,9 @@ ENV/
 .env
 .envrc
 
+# Streamlit secrets (contain tokens — never commit)
+.streamlit/secrets.toml
+
 # Testing / cache
 .pytest_cache/
 .mypy_cache/

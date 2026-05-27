@@ -6,8 +6,13 @@ Interfaz Streamlit con ONNX Runtime para el Arboretum y Palmetum de la UNAL Mede
 from __future__ import annotations
 
 import base64
+import csv
 import json
+import os
 import random
+import urllib.error
+import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 import folium
@@ -47,6 +52,12 @@ IMAGE_SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 TOP_K = 3
+
+CSV_COLUMNS     = ["species_key", "common_name", "confidence", "latitude", "longitude",
+                   "gps_accuracy", "datetime", "source"]
+CSV_PATH        = BASE_DIR / "data" / "arboles_mapeados.csv"
+GITHUB_REPO     = "ObenajM/proyecto-arboles-agentic"
+GITHUB_CSV_PATH = "data/arboles_mapeados.csv"
 
 # =============================================================================
 # Page config  (must come before any other st.* call)
@@ -267,6 +278,31 @@ def get_campus_img_b64() -> str:
         return base64.b64encode(f.read()).decode()
 
 
+@st.cache_data(show_spinner=False)
+def load_mapped_trees() -> list[dict]:
+    """Read arboles_mapeados.csv and return rows as map-point dicts."""
+    if not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0:
+        return []
+    rows: list[dict] = []
+    with open(CSV_PATH, newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            try:
+                rows.append({
+                    "species_key":  row.get("species_key", ""),
+                    "name":         row.get("common_name", ""),
+                    "sci":          "",
+                    "lat":          float(row["latitude"]),
+                    "lon":          float(row["longitude"]),
+                    "confidence":   float(row.get("confidence") or 0),
+                    "gps_accuracy": row.get("gps_accuracy") or None,
+                    "datetime":     row.get("datetime", ""),
+                    "source":       row.get("source", ""),
+                })
+            except (ValueError, KeyError):
+                continue
+    return rows
+
+
 @st.cache_data
 def load_classes() -> list[str]:
     if not CLASSES_PATH.exists():
@@ -361,6 +397,90 @@ def build_campus_map(tree_points: list[dict]) -> folium.Map:
 
     folium.LayerControl().add_to(m)
     return m
+
+
+def _ensure_csv_headers() -> None:
+    """Write column headers if the CSV is absent or empty."""
+    if not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0:
+        with open(CSV_PATH, "w", newline="", encoding="utf-8") as fh:
+            csv.DictWriter(fh, fieldnames=CSV_COLUMNS).writeheader()
+
+
+def _get_github_token() -> str | None:
+    try:
+        return st.secrets["GITHUB_TOKEN"]
+    except (KeyError, FileNotFoundError, AttributeError):
+        return os.environ.get("GITHUB_TOKEN")
+
+
+def _push_csv_to_github() -> tuple[bool, str]:
+    """Upload the current CSV to GitHub via the Contents API."""
+    token = _get_github_token()
+    if not token:
+        return False, "GITHUB_TOKEN no configurado — árbol guardado solo localmente."
+
+    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_CSV_PATH}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept":        "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    # 1. Fetch current SHA (required for updates; empty for a new file)
+    sha = ""
+    try:
+        req = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            sha = json.loads(resp.read()).get("sha", "")
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            return False, f"Error al leer el archivo en GitHub: HTTP {exc.code}"
+    except OSError as exc:
+        return False, f"Error de red al leer SHA: {exc}"
+
+    # 2. Encode local file
+    with open(CSV_PATH, "rb") as fh:
+        content_b64 = base64.b64encode(fh.read()).decode()
+
+    # 3. PUT updated file
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    body: dict = {
+        "message": f"TreeLens: actualizar arboles_mapeados.csv [{now_str}]",
+        "content": content_b64,
+    }
+    if sha:
+        body["sha"] = sha
+
+    payload = json.dumps(body).encode()
+    put_req = urllib.request.Request(
+        api_url,
+        data=payload,
+        headers={**headers, "Content-Type": "application/json"},
+        method="PUT",
+    )
+    try:
+        with urllib.request.urlopen(put_req, timeout=15):
+            return True, "✅ CSV sincronizado con GitHub correctamente."
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:300]
+        return False, f"Error al actualizar GitHub: HTTP {exc.code} — {detail}"
+    except OSError as exc:
+        return False, f"Error de red al actualizar GitHub: {exc}"
+
+
+def save_tree_to_csv(row: dict) -> None:
+    """Append *row* to the CSV (creates headers if file is empty) and bust cache."""
+    _ensure_csv_headers()
+    with open(CSV_PATH, "a", newline="", encoding="utf-8") as fh:
+        csv.DictWriter(fh, fieldnames=CSV_COLUMNS, extrasaction="ignore").writerow(row)
+    load_mapped_trees.clear()
+
+
+def _init_map_points() -> None:
+    """Populate session_state['map_points'] from the CSV on the first visit."""
+    if "map_initialized" not in st.session_state:
+        st.session_state["map_points"]    = load_mapped_trees()
+        st.session_state["map_initialized"] = True
 
 
 def run_inference(image: Image.Image, top_k: int = TOP_K) -> list[dict]:
@@ -837,7 +957,8 @@ with tab_classify:
         with col_res:
             with st.spinner("🔍 Analizando imagen…"):
                 results = run_inference(image, top_k=min(TOP_K, len(class_names)))
-            st.session_state["detected_species"] = results[0]["key"]
+            st.session_state["detected_species"]    = results[0]["key"]
+            st.session_state["detected_confidence"] = results[0]["prob"]
             render_predictions(results)
 
         st.markdown("---")
@@ -915,11 +1036,22 @@ with tab_trivia:
 # ── Tab 4: Campus map ─────────────────────────────────────────────────────────
 
 with tab_map:
+    _init_map_points()   # load CSV into session state on first visit
+
     st.markdown("## 🗺️ Mapa del campus")
     st.markdown(
         "Activa la ubicación GPS de tu dispositivo para marcar en el mapa dónde se encuentra "
-        "el árbol que acabas de identificar. Los puntos guardados permanecen durante la sesión."
+        "el árbol que acabas de identificar. Los puntos se guardan en el repositorio."
     )
+
+    # ── GitHub token status (sidebar-style note) ───────────────────────────────
+    if not _get_github_token():
+        st.warning(
+            "⚠️ **GITHUB_TOKEN no configurado.** Los árboles se guardarán en el CSV local "
+            "pero no se sincronizarán con el repositorio. "
+            "Copia `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` y añade tu token.",
+            icon=None,
+        )
 
     # ── Geolocation widget ─────────────────────────────────────────────────────
     location = streamlit_geolocation()
@@ -927,6 +1059,16 @@ with tab_map:
     col_ctrl, col_map_view = st.columns([1, 2.5], gap="large")
 
     with col_ctrl:
+        # Show flash message from previous save action
+        if flash := st.session_state.pop("_map_flash", None):
+            ftype, ftext = flash
+            if ftype == "success":
+                st.success(ftext)
+            elif ftype == "warning":
+                st.warning(ftext)
+            else:
+                st.info(ftext)
+
         lat = lon = acc = None
         if location and location.get("latitude") is not None:
             lat = float(location["latitude"])
@@ -934,23 +1076,57 @@ with tab_map:
             acc = location.get("accuracy")
 
             acc_str = f"\n\nPrecisión: ±{acc:.0f} m" if acc is not None else ""
-            st.success(f"**📍 Ubicación actual**\n\nLat: `{lat:.6f}`\n\nLon: `{lon:.6f}`{acc_str}")
+            st.success(
+                f"**📍 Ubicación actual**\n\nLat: `{lat:.6f}`\n\nLon: `{lon:.6f}`{acc_str}"
+            )
 
             detected = st.session_state.get("detected_species")
             if detected:
                 sp_name = get_info(detected).get("nombre_comun") or clean_name(detected)
                 sp_sci  = get_info(detected).get("nombre_cientifico", "")
-                st.markdown(f"**Especie detectada:** {sp_name}")
+                conf    = float(st.session_state.get("detected_confidence", 0.0))
+                st.markdown(
+                    f"**Especie detectada:** {sp_name}  \n"
+                    f"Confianza: **{conf:.1%}**"
+                )
+
                 if st.button("💾 Guardar árbol en el mapa", key="map_save"):
-                    pts: list[dict] = st.session_state.setdefault("map_points", [])
-                    pts.append({
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    # 1 — Persist to CSV
+                    csv_row = {
+                        "species_key":  detected,
+                        "common_name":  sp_name,
+                        "confidence":   f"{conf:.4f}",
+                        "latitude":     f"{lat:.7f}",
+                        "longitude":    f"{lon:.7f}",
+                        "gps_accuracy": f"{acc:.1f}" if acc is not None else "",
+                        "datetime":     now_str,
+                        "source":       "gps",
+                    }
+                    save_tree_to_csv(csv_row)
+
+                    # 2 — Update session state
+                    st.session_state["map_points"].append({
                         "species_key": detected,
-                        "name": sp_name,
-                        "sci": sp_sci,
-                        "lat": lat,
-                        "lon": lon,
+                        "name":        sp_name,
+                        "sci":         sp_sci,
+                        "lat":         lat,
+                        "lon":         lon,
+                        "confidence":  conf,
+                        "datetime":    now_str,
+                        "source":      "gps",
                     })
-                    st.success("✅ Árbol añadido al mapa")
+
+                    # 3 — Push to GitHub
+                    ok, msg = _push_csv_to_github()
+                    flash_type = "success" if ok else "warning"
+                    flash_text = (
+                        f"✅ **{sp_name}** guardado en el mapa y sincronizado con GitHub."
+                        if ok
+                        else f"🌳 **{sp_name}** guardado localmente. {msg}"
+                    )
+                    st.session_state["_map_flash"] = (flash_type, flash_text)
                     st.rerun()
             else:
                 st.info(
@@ -971,14 +1147,16 @@ with tab_map:
             for i, pt in enumerate(saved_pts):
                 c1, c2 = st.columns([5, 1])
                 with c1:
-                    st.caption(f"🌳 **{pt['name']}**\n{pt['lat']:.5f}, {pt['lon']:.5f}")
+                    conf_str = f" · {pt['confidence']:.0%}" if pt.get("confidence") else ""
+                    dt_str   = f"\n{pt['datetime']}" if pt.get("datetime") else ""
+                    st.caption(
+                        f"🌳 **{pt['name']}**{conf_str}\n"
+                        f"{pt['lat']:.5f}, {pt['lon']:.5f}{dt_str}"
+                    )
                 with c2:
-                    if st.button("🗑️", key=f"map_del_{i}", help="Eliminar este punto"):
+                    if st.button("🗑️", key=f"map_del_{i}", help="Eliminar de la vista"):
                         st.session_state["map_points"].pop(i)
                         st.rerun()
-            if st.button("🗑️ Limpiar todos", key="map_clear_all"):
-                st.session_state["map_points"] = []
-                st.rerun()
 
     with col_map_view:
         tree_points = st.session_state.get("map_points", [])

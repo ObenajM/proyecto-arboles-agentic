@@ -406,22 +406,64 @@ def _ensure_csv_headers() -> None:
             csv.DictWriter(fh, fieldnames=CSV_COLUMNS).writeheader()
 
 
-def _get_github_token() -> str | None:
+def _get_github_config() -> dict | None:
+    """Return GitHub config dict or None if no token is available.
+
+    Supports two secrets formats:
+      Format A (flat):   GITHUB_TOKEN, GITHUB_REPO, GITHUB_BRANCH, GITHUB_CSV_PATH
+      Format B (nested): [github] section with token / repo / branch / csv_path keys
+    Environment variables with the same names are also accepted as a fallback.
+    """
+    token    = None
+    repo     = GITHUB_REPO
+    branch   = "main"
+    csv_path = GITHUB_CSV_PATH
+
+    # Format B — [github] section in secrets.toml
     try:
-        return st.secrets["GITHUB_TOKEN"]
+        gh       = st.secrets["github"]
+        token    = gh.get("token")
+        repo     = gh.get("repo",     repo)
+        branch   = gh.get("branch",   branch)
+        csv_path = gh.get("csv_path", csv_path)
     except (KeyError, FileNotFoundError, AttributeError):
-        return os.environ.get("GITHUB_TOKEN")
+        pass
+
+    # Format A — flat keys (override Format B values if present)
+    if not token:
+        try:
+            token = st.secrets["GITHUB_TOKEN"]
+        except (KeyError, FileNotFoundError, AttributeError):
+            pass
+    try:
+        repo     = st.secrets.get("GITHUB_REPO",     repo)
+        branch   = st.secrets.get("GITHUB_BRANCH",   branch)
+        csv_path = st.secrets.get("GITHUB_CSV_PATH", csv_path)
+    except (AttributeError, FileNotFoundError):
+        pass
+
+    # Environment-variable fallbacks
+    token    = token    or os.environ.get("GITHUB_TOKEN")
+    repo     = os.environ.get("GITHUB_REPO",     repo)
+    branch   = os.environ.get("GITHUB_BRANCH",   branch)
+    csv_path = os.environ.get("GITHUB_CSV_PATH", csv_path)
+
+    if not token:
+        return None
+    return {"token": token, "repo": repo, "branch": branch, "csv_path": csv_path}
 
 
 def _push_csv_to_github() -> tuple[bool, str]:
-    """Upload the current CSV to GitHub via the Contents API."""
-    token = _get_github_token()
-    if not token:
-        return False, "GITHUB_TOKEN no configurado — árbol guardado solo localmente."
+    """Upload the current CSV to GitHub via the Contents API.
+    Returns (True, success_msg) or (False, error_msg).
+    """
+    cfg = _get_github_config()
+    if not cfg:
+        return False, "token_missing"
 
-    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_CSV_PATH}"
+    api_url = f"https://api.github.com/repos/{cfg['repo']}/contents/{cfg['csv_path']}"
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {cfg['token']}",
         "Accept":        "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
@@ -895,6 +937,9 @@ with st.sidebar:
         "Para identificaciones definitivas consulta un especialista en botánica."
     )
 
+    if not _get_github_config():
+        st.caption("📍 Sync con repositorio desactivado. Las ubicaciones se guardan localmente.")
+
 
 # =============================================================================
 # Hero banner
@@ -1041,17 +1086,8 @@ with tab_map:
     st.markdown("## 🗺️ Mapa del campus")
     st.markdown(
         "Activa la ubicación GPS de tu dispositivo para marcar en el mapa dónde se encuentra "
-        "el árbol que acabas de identificar. Los puntos se guardan en el repositorio."
+        "el árbol que acabas de identificar. Los puntos guardados se almacenan en el CSV del proyecto."
     )
-
-    # ── GitHub token status (sidebar-style note) ───────────────────────────────
-    if not _get_github_token():
-        st.warning(
-            "⚠️ **GITHUB_TOKEN no configurado.** Los árboles se guardarán en el CSV local "
-            "pero no se sincronizarán con el repositorio. "
-            "Copia `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` y añade tu token.",
-            icon=None,
-        )
 
     # ── Geolocation widget ─────────────────────────────────────────────────────
     location = streamlit_geolocation()
@@ -1118,14 +1154,17 @@ with tab_map:
                         "source":      "gps",
                     })
 
-                    # 3 — Push to GitHub
+                    # 3 — Push to GitHub (best-effort; missing token is not an error)
                     ok, msg = _push_csv_to_github()
-                    flash_type = "success" if ok else "warning"
-                    flash_text = (
-                        f"✅ **{sp_name}** guardado en el mapa y sincronizado con GitHub."
-                        if ok
-                        else f"🌳 **{sp_name}** guardado localmente. {msg}"
-                    )
+                    if ok:
+                        flash_text = f"✅ **{sp_name}** guardado y sincronizado con GitHub."
+                        flash_type = "success"
+                    elif msg == "token_missing":
+                        flash_text = f"✅ **{sp_name}** guardado localmente."
+                        flash_type = "success"
+                    else:
+                        flash_text = f"✅ **{sp_name}** guardado localmente. (GitHub: {msg})"
+                        flash_type = "warning"
                     st.session_state["_map_flash"] = (flash_type, flash_text)
                     st.rerun()
             else:
@@ -1157,6 +1196,22 @@ with tab_map:
                     if st.button("🗑️", key=f"map_del_{i}", help="Eliminar de la vista"):
                         st.session_state["map_points"].pop(i)
                         st.rerun()
+
+            # ── Manual GitHub sync ─────────────────────────────────────────────
+            st.markdown("---")
+            if st.button("☁️ Sincronizar con GitHub", key="map_sync"):
+                if not _get_github_config():
+                    st.info(
+                        "La sincronización con GitHub requiere un token configurado. "
+                        "Copia `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` "
+                        "y añade tu `GITHUB_TOKEN`."
+                    )
+                else:
+                    ok, msg = _push_csv_to_github()
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
 
     with col_map_view:
         tree_points = st.session_state.get("map_points", [])

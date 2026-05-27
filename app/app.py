@@ -5,14 +5,18 @@ Interfaz Streamlit con ONNX Runtime para el Arboretum y Palmetum de la UNAL Mede
 
 from __future__ import annotations
 
+import base64
 import json
 import random
 from pathlib import Path
 
+import folium
 import numpy as np
 import onnxruntime as ort
 import streamlit as st
 from PIL import Image, ImageOps
+from streamlit_folium import st_folium
+from streamlit_geolocation import streamlit_geolocation
 
 # =============================================================================
 # Paths & constants
@@ -22,6 +26,22 @@ BASE_DIR     = Path(__file__).resolve().parent.parent
 MODEL_PATH   = BASE_DIR / "models" / "modelo_arboles_best.onnx"
 CLASSES_PATH = BASE_DIR / "models" / "clases.json"
 INFO_PATH    = BASE_DIR / "data"   / "info.json"
+
+CAMPUS_IMG_PATH = Path(__file__).parent / "assets" / "Campus.jpg"
+
+# Derived from Campus.jgw (WGS84 / EPSG:4326) + image dimensions 1262×2052 px.
+# JGW: pixel_size = 0.0000045°, upper-left pixel center at (-75.5792788353322, 6.2682597468666).
+_PX = 0.0000045
+_UL_LON, _UL_LAT = -75.5792788353322, 6.2682597468666
+_IMG_W, _IMG_H   = 1262, 2052
+CAMPUS_BOUNDS = [
+    [_UL_LAT - _PX * _IMG_H + _PX / 2, _UL_LON - _PX / 2],   # [lat_south, lon_west]
+    [_UL_LAT + _PX / 2,                 _UL_LON + _PX * _IMG_W - _PX / 2],  # [lat_north, lon_east]
+]
+CAMPUS_CENTER = [
+    (_UL_LAT - _PX * _IMG_H / 2),
+    (_UL_LON + _PX * _IMG_W / 2),
+]
 
 IMAGE_SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -241,6 +261,13 @@ st.markdown(
 
 
 @st.cache_data
+def get_campus_img_b64() -> str:
+    """Return Campus.jpg as a base64-encoded data URI for folium ImageOverlay."""
+    with open(CAMPUS_IMG_PATH, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
+@st.cache_data
 def load_classes() -> list[str]:
     if not CLASSES_PATH.exists():
         st.error(f"Archivo de clases no encontrado: `{CLASSES_PATH}`")
@@ -304,6 +331,36 @@ def preprocess(image: Image.Image) -> np.ndarray:
 def softmax(x: np.ndarray) -> np.ndarray:
     e = np.exp(x - x.max())
     return e / e.sum()
+
+
+def build_campus_map(tree_points: list[dict]) -> folium.Map:
+    """Return a folium map with Campus.jpg georeferenced overlay and tree markers."""
+    m = folium.Map(location=CAMPUS_CENTER, zoom_start=17, tiles="CartoDB positron")
+
+    folium.raster_layers.ImageOverlay(
+        image=f"data:image/jpeg;base64,{get_campus_img_b64()}",
+        bounds=CAMPUS_BOUNDS,
+        opacity=0.85,
+        name="Plano del campus",
+        interactive=True,
+        zindex=1,
+    ).add_to(m)
+
+    for pt in tree_points:
+        folium.Marker(
+            location=[pt["lat"], pt["lon"]],
+            popup=folium.Popup(
+                f"<b>{pt['name']}</b><br>"
+                f"<i>{pt.get('sci', '')}</i><br>"
+                f"<small>{pt['lat']:.6f}, {pt['lon']:.6f}</small>",
+                max_width=220,
+            ),
+            tooltip=pt["name"],
+            icon=folium.Icon(color="green", icon="tree", prefix="fa"),
+        ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+    return m
 
 
 def run_inference(image: Image.Image, top_k: int = TOP_K) -> list[dict]:
@@ -742,8 +799,8 @@ st.markdown(
 # Tabs
 # =============================================================================
 
-tab_classify, tab_catalog, tab_trivia = st.tabs(
-    ["📷 Clasificar", "📚 Explorar especies", "🧠 Trivia botánica"]
+tab_classify, tab_catalog, tab_trivia, tab_map = st.tabs(
+    ["📷 Clasificar", "📚 Explorar especies", "🧠 Trivia botánica", "🗺️ Mapa del campus"]
 )
 
 # ── Tab 1: Classify ───────────────────────────────────────────────────────────
@@ -854,3 +911,76 @@ with tab_trivia:
 
             st.markdown("---")
             render_trivia(trivia_key)
+
+# ── Tab 4: Campus map ─────────────────────────────────────────────────────────
+
+with tab_map:
+    st.markdown("## 🗺️ Mapa del campus")
+    st.markdown(
+        "Activa la ubicación GPS de tu dispositivo para marcar en el mapa dónde se encuentra "
+        "el árbol que acabas de identificar. Los puntos guardados permanecen durante la sesión."
+    )
+
+    # ── Geolocation widget ─────────────────────────────────────────────────────
+    location = streamlit_geolocation()
+
+    col_ctrl, col_map_view = st.columns([1, 2.5], gap="large")
+
+    with col_ctrl:
+        lat = lon = acc = None
+        if location and location.get("latitude") is not None:
+            lat = float(location["latitude"])
+            lon = float(location["longitude"])
+            acc = location.get("accuracy")
+
+            acc_str = f"\n\nPrecisión: ±{acc:.0f} m" if acc is not None else ""
+            st.success(f"**📍 Ubicación actual**\n\nLat: `{lat:.6f}`\n\nLon: `{lon:.6f}`{acc_str}")
+
+            detected = st.session_state.get("detected_species")
+            if detected:
+                sp_name = get_info(detected).get("nombre_comun") or clean_name(detected)
+                sp_sci  = get_info(detected).get("nombre_cientifico", "")
+                st.markdown(f"**Especie detectada:** {sp_name}")
+                if st.button("💾 Guardar árbol en el mapa", key="map_save"):
+                    pts: list[dict] = st.session_state.setdefault("map_points", [])
+                    pts.append({
+                        "species_key": detected,
+                        "name": sp_name,
+                        "sci": sp_sci,
+                        "lat": lat,
+                        "lon": lon,
+                    })
+                    st.success("✅ Árbol añadido al mapa")
+                    st.rerun()
+            else:
+                st.info(
+                    "Identifica una especie en la pestaña **📷 Clasificar** "
+                    "y luego guárdala aquí con su coordenada GPS."
+                )
+        else:
+            st.info(
+                "Haz clic en **Get Location** para activar tu GPS "
+                "y marcar un árbol en el mapa."
+            )
+
+        # ── Saved points list ──────────────────────────────────────────────────
+        saved_pts: list[dict] = st.session_state.get("map_points", [])
+        if saved_pts:
+            st.markdown("---")
+            st.markdown(f"**Árboles guardados ({len(saved_pts)})**")
+            for i, pt in enumerate(saved_pts):
+                c1, c2 = st.columns([5, 1])
+                with c1:
+                    st.caption(f"🌳 **{pt['name']}**\n{pt['lat']:.5f}, {pt['lon']:.5f}")
+                with c2:
+                    if st.button("🗑️", key=f"map_del_{i}", help="Eliminar este punto"):
+                        st.session_state["map_points"].pop(i)
+                        st.rerun()
+            if st.button("🗑️ Limpiar todos", key="map_clear_all"):
+                st.session_state["map_points"] = []
+                st.rerun()
+
+    with col_map_view:
+        tree_points = st.session_state.get("map_points", [])
+        campus_map  = build_campus_map(tree_points)
+        st_folium(campus_map, use_container_width=True, height=580, returned_objects=[])

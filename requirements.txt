@@ -6,3 +6,6 @@ pandas
 scikit-learn
 streamlit>=1.37
 onnxruntime>=1.18
+folium>=0.14
+streamlit-folium>=0.15
+streamlit-geolocation

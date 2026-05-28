@@ -32,20 +32,18 @@ MODEL_PATH   = BASE_DIR / "models" / "modelo_arboles_best.onnx"
 CLASSES_PATH = BASE_DIR / "models" / "clases.json"
 INFO_PATH    = BASE_DIR / "data"   / "info.json"
 
-CAMPUS_IMG_PATH = Path(__file__).parent / "assets" / "Campus.jpg"
+# Geographic centre of the UNAL Medellín campus (WGS84)
+CAMPUS_CENTER = [6.2636427, -75.5764393]
 
-# Derived from Campus.jgw (WGS84 / EPSG:4326) + image dimensions 1262×2052 px.
-_PX = 0.0000045
-_UL_LON, _UL_LAT = -75.5792788353322, 6.2682597468666
-_IMG_W, _IMG_H   = 1262, 2052
-CAMPUS_BOUNDS = [
-    [_UL_LAT - _PX * _IMG_H + _PX / 2, _UL_LON - _PX / 2],
-    [_UL_LAT + _PX / 2,                 _UL_LON + _PX * _IMG_W - _PX / 2],
-]
-CAMPUS_CENTER = [
-    (_UL_LAT - _PX * _IMG_H / 2),
-    (_UL_LON + _PX * _IMG_W / 2),
-]
+# Esri World Imagery tile layer
+_ESRI_SATELLITE_URL  = (
+    "https://server.arcgisonline.com/ArcGIS/rest/services/"
+    "World_Imagery/MapServer/tile/{z}/{y}/{x}"
+)
+_ESRI_SATELLITE_ATTR = (
+    "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, "
+    "Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+)
 
 IMAGE_SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -581,12 +579,6 @@ inject_custom_css()
 # =============================================================================
 
 
-@st.cache_data
-def get_campus_img_b64() -> str:
-    with open(CAMPUS_IMG_PATH, "rb") as f:
-        return base64.b64encode(f.read()).decode()
-
-
 @st.cache_data(show_spinner=False)
 def load_mapped_trees() -> list[dict]:
     if not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0:
@@ -673,29 +665,77 @@ def softmax(x: np.ndarray) -> np.ndarray:
     return e / e.sum()
 
 
-def build_campus_map(tree_points: list[dict]) -> folium.Map:
-    m = folium.Map(location=CAMPUS_CENTER, zoom_start=17, tiles="CartoDB positron")
-    folium.raster_layers.ImageOverlay(
-        image=f"data:image/jpeg;base64,{get_campus_img_b64()}",
-        bounds=CAMPUS_BOUNDS,
-        opacity=0.85,
-        name="Plano del campus",
-        interactive=True,
-        zindex=1,
-    ).add_to(m)
+def build_campus_map(
+    tree_points: list[dict],
+    style: str = "satellite",
+    gps_point: tuple[float, float] | None = None,
+    click_point: tuple[float, float] | None = None,
+) -> folium.Map:
+    """Build a folium map with the chosen tile style and all markers."""
+    if style == "satellite":
+        m = folium.Map(
+            location=CAMPUS_CENTER,
+            zoom_start=18,
+            tiles=_ESRI_SATELLITE_URL,
+            attr=_ESRI_SATELLITE_ATTR,
+            max_zoom=20,
+        )
+    else:
+        m = folium.Map(location=CAMPUS_CENTER, zoom_start=18, tiles="CartoDB positron")
+
+    # Saved tree markers
     for pt in tree_points:
+        conf_str = f"{float(pt.get('confidence', 0)):.0%}" if pt.get("confidence") else "—"
+        dt_str   = pt.get("datetime", "")
+        src_str  = pt.get("source", "")
+        popup_html = (
+            f"<div style='font-family:sans-serif;min-width:160px'>"
+            f"<b style='font-size:1rem'>{pt['name']}</b><br>"
+            f"<i style='color:#555'>{pt.get('sci','')}</i><br>"
+            f"<hr style='margin:.4rem 0'>"
+            f"<table style='font-size:.82rem;border-collapse:collapse'>"
+            f"<tr><td style='color:#777;padding-right:.5rem'>Confianza</td><td><b>{conf_str}</b></td></tr>"
+            f"<tr><td style='color:#777'>Fecha</td><td>{dt_str}</td></tr>"
+            f"<tr><td style='color:#777'>Fuente</td><td>{src_str}</td></tr>"
+            f"<tr><td style='color:#777'>Lat</td><td>{pt['lat']:.6f}</td></tr>"
+            f"<tr><td style='color:#777'>Lon</td><td>{pt['lon']:.6f}</td></tr>"
+            f"</table></div>"
+        )
         folium.Marker(
             location=[pt["lat"], pt["lon"]],
-            popup=folium.Popup(
-                f"<b>{pt['name']}</b><br>"
-                f"<i>{pt.get('sci', '')}</i><br>"
-                f"<small>{pt['lat']:.6f}, {pt['lon']:.6f}</small>",
-                max_width=220,
-            ),
+            popup=folium.Popup(popup_html, max_width=240),
             tooltip=pt["name"],
             icon=folium.Icon(color="green", icon="tree", prefix="fa"),
         ).add_to(m)
-    folium.LayerControl().add_to(m)
+
+    # GPS location marker (blue pulsing circle)
+    if gps_point:
+        folium.CircleMarker(
+            location=gps_point,
+            radius=10,
+            color="#1976D2",
+            fill=True,
+            fill_color="#42A5F5",
+            fill_opacity=0.75,
+            tooltip="Tu ubicación GPS",
+            popup=folium.Popup(
+                f"<b>Ubicación GPS</b><br>{gps_point[0]:.6f}, {gps_point[1]:.6f}",
+                max_width=180,
+            ),
+        ).add_to(m)
+
+    # Manual click marker (orange pin)
+    if click_point:
+        folium.Marker(
+            location=click_point,
+            tooltip="Punto seleccionado manualmente",
+            popup=folium.Popup(
+                f"<b>Punto seleccionado</b><br>{click_point[0]:.6f}, {click_point[1]:.6f}",
+                max_width=180,
+            ),
+            icon=folium.Icon(color="orange", icon="map-marker", prefix="fa"),
+        ).add_to(m)
+
     return m
 
 
@@ -1423,16 +1463,28 @@ with tab_map:
         '<div class="section-head">'
         '<div class="section-head-icon">🗺</div>'
         '<div><div class="section-head-title">Mapa del campus</div>'
-        '<div class="section-head-sub">Activa tu GPS, identifica un árbol y márcalo sobre el plano del campus</div>'
-        '</div></div>',
+        '<div class="section-head-sub">'
+        'Activa tu GPS, identifica un árbol y márcalo en el mapa — o haz clic para fijar un punto manualmente'
+        '</div></div></div>',
         unsafe_allow_html=True,
     )
 
+    # ── Map style selector ─────────────────────────────────────────────────────
+    _style_label = st.radio(
+        "Estilo de mapa:",
+        ["🛰 Vista satelital", "🗺 Mapa de calles"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    _map_style = "satellite" if _style_label.startswith("🛰") else "streets"
+
+    # ── GPS widget ─────────────────────────────────────────────────────────────
     location = streamlit_geolocation()
 
     col_ctrl, col_map_view = st.columns([1, 2.4], gap="large")
 
     with col_ctrl:
+        # Flash message from previous save
         if flash := st.session_state.pop("_map_flash", None):
             ftype, ftext = flash
             if ftype == "success":
@@ -1442,12 +1494,12 @@ with tab_map:
             else:
                 st.info(ftext)
 
+        # ── GPS location card ──────────────────────────────────────────────────
         lat = lon = acc = None
         if location and location.get("latitude") is not None:
             lat = float(location["latitude"])
             lon = float(location["longitude"])
             acc = location.get("accuracy")
-
             acc_str = f" · ±{acc:.0f} m" if acc is not None else ""
             st.markdown(
                 f'<div style="background:var(--cream);border:1.5px solid var(--mint);'
@@ -1460,70 +1512,95 @@ with tab_map:
                 f'</div>',
                 unsafe_allow_html=True,
             )
-
-            detected = st.session_state.get("detected_species")
-            if detected:
-                sp_name = get_info(detected).get("nombre_comun") or clean_name(detected)
-                sp_sci  = get_info(detected).get("nombre_cientifico", "")
-                conf    = float(st.session_state.get("detected_confidence", 0.0))
-                st.markdown(
-                    f'<div style="font-size:.88rem;color:var(--muted);margin-bottom:.5rem">'
-                    f'Especie: <strong style="color:var(--forest)">{_esc(sp_name)}</strong>'
-                    f' &nbsp;·&nbsp; <span style="color:var(--terra)">{conf:.0%}</span></div>',
-                    unsafe_allow_html=True,
-                )
-
-                if st.button("💾 Guardar árbol en el mapa", key="map_save"):
-                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    csv_row = {
-                        "species_key":  detected,
-                        "common_name":  sp_name,
-                        "confidence":   f"{conf:.4f}",
-                        "latitude":     f"{lat:.7f}",
-                        "longitude":    f"{lon:.7f}",
-                        "gps_accuracy": f"{acc:.1f}" if acc is not None else "",
-                        "datetime":     now_str,
-                        "source":       "gps",
-                    }
-                    save_tree_to_csv(csv_row)
-                    st.session_state["map_points"].append({
-                        "species_key": detected,
-                        "name":        sp_name,
-                        "sci":         sp_sci,
-                        "lat":         lat,
-                        "lon":         lon,
-                        "confidence":  conf,
-                        "datetime":    now_str,
-                        "source":      "gps",
-                    })
-                    ok, msg = _push_csv_to_github()
-                    if ok:
-                        flash_text = f"✅ {sp_name} guardado y sincronizado."
-                        flash_type = "success"
-                    elif msg == "token_missing":
-                        flash_text = f"✅ {sp_name} guardado localmente."
-                        flash_type = "success"
-                    else:
-                        flash_text = f"✅ {sp_name} guardado. (GitHub: {msg})"
-                        flash_type = "warning"
-                    st.session_state["_map_flash"] = (flash_type, flash_text)
-                    st.rerun()
-            else:
-                st.markdown(
-                    '<div class="alert-tip">Identifica una especie en <strong>Identificar</strong> '
-                    'y luego guárdala aquí con su coordenada GPS.</div>',
-                    unsafe_allow_html=True,
-                )
         else:
             st.markdown(
-                '<div class="empty-state" style="padding:2rem 1rem">'
-                '<div class="empty-state-icon">📍</div>'
-                '<div class="empty-state-text">Pulsa <strong>Get Location</strong> '
-                'para activar el GPS de tu dispositivo.</div>'
+                '<div class="empty-state" style="padding:1.5rem 1rem">'
+                '<div class="empty-state-icon" style="font-size:2rem">📍</div>'
+                '<div class="empty-state-text" style="font-size:.85rem">'
+                'Pulsa <strong>Get Location</strong> para activar el GPS.</div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
 
+        # ── Manual click location card ─────────────────────────────────────────
+        click_pt = st.session_state.get("map_click_point")
+        if click_pt:
+            st.markdown(
+                f'<div style="background:var(--cream);border:1.5px solid var(--terra-lt);'
+                f'border-radius:var(--r-md);padding:.8rem 1rem;margin-bottom:.75rem">'
+                f'<div style="font-size:.68rem;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:.1em;color:var(--terra);margin-bottom:.3rem">🖱 Punto seleccionado</div>'
+                f'<div style="font-size:.92rem;color:var(--forest);font-weight:600">'
+                f'{click_pt[0]:.6f}, {click_pt[1]:.6f}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("✕ Borrar punto seleccionado", key="map_clear_click"):
+                st.session_state.pop("map_click_point", None)
+                st.rerun()
+
+        # ── Save button — GPS or manual click ─────────────────────────────────
+        detected = st.session_state.get("detected_species")
+        save_lat = save_lon = save_source = None
+
+        if lat is not None:
+            save_lat, save_lon, save_source = lat, lon, "gps"
+        elif click_pt:
+            save_lat, save_lon, save_source = click_pt[0], click_pt[1], "manual_map_click"
+
+        if detected and save_lat is not None:
+            sp_name = get_info(detected).get("nombre_comun") or clean_name(detected)
+            sp_sci  = get_info(detected).get("nombre_cientifico", "")
+            conf    = float(st.session_state.get("detected_confidence", 0.0))
+            src_icon = "📍" if save_source == "gps" else "🖱"
+            st.markdown(
+                f'<div style="font-size:.88rem;color:var(--muted);margin-bottom:.5rem">'
+                f'Especie: <strong style="color:var(--forest)">{_esc(sp_name)}</strong>'
+                f' &nbsp;·&nbsp; <span style="color:var(--terra)">{conf:.0%}</span></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button(f"💾 Guardar {src_icon} en el mapa", key="map_save"):
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                csv_row = {
+                    "species_key":  detected,
+                    "common_name":  sp_name,
+                    "confidence":   f"{conf:.4f}",
+                    "latitude":     f"{save_lat:.7f}",
+                    "longitude":    f"{save_lon:.7f}",
+                    "gps_accuracy": f"{acc:.1f}" if (acc is not None and save_source == "gps") else "",
+                    "datetime":     now_str,
+                    "source":       save_source,
+                }
+                save_tree_to_csv(csv_row)
+                st.session_state["map_points"].append({
+                    "species_key": detected,
+                    "name":        sp_name,
+                    "sci":         sp_sci,
+                    "lat":         save_lat,
+                    "lon":         save_lon,
+                    "confidence":  conf,
+                    "datetime":    now_str,
+                    "source":      save_source,
+                })
+                if save_source == "manual_map_click":
+                    st.session_state.pop("map_click_point", None)
+                ok, msg = _push_csv_to_github()
+                if ok:
+                    flash_text, flash_type = f"✅ {sp_name} guardado y sincronizado.", "success"
+                elif msg == "token_missing":
+                    flash_text, flash_type = f"✅ {sp_name} guardado localmente.", "success"
+                else:
+                    flash_text, flash_type = f"✅ {sp_name} guardado. (GitHub: {msg})", "warning"
+                st.session_state["_map_flash"] = (flash_type, flash_text)
+                st.rerun()
+        elif not detected and save_lat is not None:
+            st.markdown(
+                '<div class="alert-tip">Identifica una especie en '
+                '<strong>Identificar</strong> y luego guárdala aquí.</div>',
+                unsafe_allow_html=True,
+            )
+
+        # ── Saved points list ──────────────────────────────────────────────────
         saved_pts: list[dict] = st.session_state.get("map_points", [])
         if saved_pts:
             st.markdown("---")
@@ -1551,20 +1628,36 @@ with tab_map:
             if st.button("☁️ Sincronizar con GitHub", key="map_sync"):
                 if not _get_github_config():
                     st.info(
-                        "Sincronización con GitHub requiere un token. "
-                        "Copia `.streamlit/secrets.toml.example` → `.streamlit/secrets.toml` "
-                        "y añade tu `GITHUB_TOKEN`."
+                        "Requiere GITHUB_TOKEN. Copia `.streamlit/secrets.toml.example` "
+                        "→ `.streamlit/secrets.toml` y añade tu token."
                     )
                 else:
                     ok, msg = _push_csv_to_github()
-                    if ok:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
+                    st.success(msg) if ok else st.error(msg)
 
+    # ── Map view ───────────────────────────────────────────────────────────────
     with col_map_view:
         st.markdown('<div class="map-wrap">', unsafe_allow_html=True)
-        tree_points = st.session_state.get("map_points", [])
-        campus_map  = build_campus_map(tree_points)
-        st_folium(campus_map, use_container_width=True, height=560, returned_objects=[])
+        gps_pt  = (lat, lon) if lat is not None else None
+        map_obj = build_campus_map(
+            tree_points=st.session_state.get("map_points", []),
+            style=_map_style,
+            gps_point=gps_pt,
+            click_point=st.session_state.get("map_click_point"),
+        )
+        map_data = st_folium(
+            map_obj,
+            use_container_width=True,
+            height=560,
+            returned_objects=["last_clicked"],
+        )
         st.markdown('</div>', unsafe_allow_html=True)
+
+        # Persist map click into session state (ignore clicks on existing markers)
+        last_clicked = map_data.get("last_clicked") if map_data else None
+        if last_clicked and isinstance(last_clicked, dict):
+            clat = last_clicked.get("lat")
+            clng = last_clicked.get("lng")
+            if clat is not None and clng is not None:
+                st.session_state["map_click_point"] = (float(clat), float(clng))
+                st.rerun()

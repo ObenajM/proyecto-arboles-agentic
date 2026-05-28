@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campus Tree Explorer — Navbar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ═══════════════════════════════════════════════════════════
+       TOKENS
+    ═══════════════════════════════════════════════════════════ */
+    :root {
+      --nav-bg:        #0B1F14;
+      --nav-border:    rgba(82,183,136,.12);
+      --nav-glow:      rgba(82,183,136,.10);
+      --link-active:   #ffffff;
+      --link-idle:     rgba(255,255,255,.48);
+      --link-hover:    rgba(255,255,255,.82);
+      --link-bg-hover: rgba(255,255,255,.08);
+      --link-bg-on:    rgba(255,255,255,.11);
+      --dot:           #52B788;
+      --cta:           #C85828;
+      --cta-h:         #D96B35;
+      --cta-shadow:    rgba(200,88,40,.42);
+      --page-bg:       #EFF7EB;
+      --topo:          %234a7c5f;   /* URL-encoded for SVG */
+      --card-bg:       #ffffff;
+      --card-bd:       #D3E8D8;
+      --text-hi:       #1B4332;
+      --text-mid:      #2D5038;
+      --text-lo:       #567360;
+      --forest-hero:   #0B1F14;
+      --r-full:        999px;
+      --r-xl:          22px;
+      --r-lg:          16px;
+      --r-md:          12px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       PAGE — topographic background
+    ═══════════════════════════════════════════════════════════ */
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: var(--text-hi);
+      min-height: 100vh;
+      /* Soft beige-green base */
+      background-color: #EFF7EB;
+      /* Topographic contour lines via tiled SVG */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='560'%3E%3Cg fill='none' stroke='%234a7c5f' stroke-width='0.8'%3E%3C!-- Hill A (centre-left) --%3E%3Cellipse cx='170' cy='170' rx='148' ry='100' opacity='.10'/%3E%3Cellipse cx='170' cy='170' rx='112' ry='74' opacity='.10'/%3E%3Cellipse cx='170' cy='170' rx='76' ry='48' opacity='.10'/%3E%3Cellipse cx='170' cy='170' rx='44' ry='26' opacity='.10'/%3E%3Cellipse cx='170' cy='170' rx='18' ry='11' opacity='.10'/%3E%3C!-- Hill B (lower-right) --%3E%3Cellipse cx='620' cy='420' rx='165' ry='112' opacity='.08'/%3E%3Cellipse cx='620' cy='420' rx='124' ry='82' opacity='.08'/%3E%3Cellipse cx='620' cy='420' rx='83' ry='52' opacity='.08'/%3E%3Cellipse cx='620' cy='420' rx='44' ry='26' opacity='.08'/%3E%3Cellipse cx='620' cy='420' rx='16' ry='10' opacity='.08'/%3E%3C!-- Hill C (upper-right) --%3E%3Cellipse cx='700' cy='100' rx='108' ry='72' opacity='.07'/%3E%3Cellipse cx='700' cy='100' rx='72' ry='46' opacity='.07'/%3E%3Cellipse cx='700' cy='100' rx='38' ry='23' opacity='.07'/%3E%3Cellipse cx='700' cy='100' rx='14' ry='9' opacity='.07'/%3E%3C!-- Hill D (lower-left edge) --%3E%3Cellipse cx='28' cy='500' rx='95' ry='62' opacity='.065'/%3E%3Cellipse cx='28' cy='500' rx='60' ry='38' opacity='.065'/%3E%3Cellipse cx='28' cy='500' rx='28' ry='17' opacity='.065'/%3E%3C!-- Hill E (mid) --%3E%3Cellipse cx='420' cy='490' rx='130' ry='80' opacity='.07'/%3E%3Cellipse cx='420' cy='490' rx='88' ry='52' opacity='.07'/%3E%3Cellipse cx='420' cy='490' rx='48' ry='28' opacity='.07'/%3E%3Cellipse cx='420' cy='490' rx='18' ry='10' opacity='.07'/%3E%3C!-- Contour cross-lines --%3E%3Cpath d='M80 240 Q140 210 200 240 Q260 270 320 240' stroke-width='0.6' opacity='.05'/%3E%3Cpath d='M400 150 Q460 130 520 150 Q580 170 640 150' stroke-width='0.6' opacity='.05'/%3E%3C/g%3E%3C/svg%3E");
+      background-size: 800px 560px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       NAVBAR OUTER WRAPPER
+    ═══════════════════════════════════════════════════════════ */
+    .nav-outer {
+      position: sticky;
+      top: 18px;
+      z-index: 200;
+      padding: 0 1.5rem;
+    }
+
+    /* ─── Capsule shell ─────────────────────────────────────── */
+    .nav-capsule {
+      max-width: 980px;
+      margin: 0 auto;
+      background: linear-gradient(145deg, #0D2419 0%, #0B1F14 55%, #0F2A1A 100%);
+      border-radius: var(--r-full);
+      padding: 7px 7px 7px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid var(--nav-border);
+      box-shadow:
+        0 12px 48px rgba(6,18,10,.40),
+        0  4px 14px rgba(6,18,10,.28),
+        0  1px  3px rgba(6,18,10,.18),
+        inset 0 1px 0 rgba(82,183,136,.13);
+      /* subtle inner glow */
+      backdrop-filter: blur(12px);
+    }
+
+    /* ─── Brand ─────────────────────────────────────────────── */
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .nav-logo {
+      width: 34px; height: 34px;
+      background: linear-gradient(145deg, #1A4D34, #2D6A4F);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow:
+        0 0 0 1px rgba(82,183,136,.28),
+        0 3px 10px rgba(6,18,10,.3);
+      flex-shrink: 0;
+    }
+    .nav-brand-name {
+      font-size: .92rem;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -.02em;
+      white-space: nowrap;
+    }
+
+    /* ─── Nav links ─────────────────────────────────────────── */
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      flex: 1;
+      justify-content: center;
+    }
+    .nav-link {
+      position: relative;
+      font-size: .85rem;
+      font-weight: 500;
+      color: var(--link-idle);
+      padding: 7px 15px;
+      border-radius: var(--r-full);
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color .15s ease, background .15s ease;
+      user-select: none;
+    }
+    .nav-link:hover {
+      color: var(--link-hover);
+      background: var(--link-bg-hover);
+    }
+    .nav-link.active {
+      color: var(--link-active);
+      font-weight: 600;
+      background: var(--link-bg-on);
+    }
+    /* Green dot under active link */
+    .nav-link.active::after {
+      content: '';
+      position: absolute;
+      bottom: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 4px;
+      background: var(--dot);
+      border-radius: 50%;
+      box-shadow: 0 0 6px rgba(82,183,136,.8);
+    }
+
+    /* ─── Mobile hamburger ──────────────────────────────────── */
+    .nav-hamburger {
+      display: none;
+      width: 38px; height: 38px;
+      background: rgba(255,255,255,.09);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: var(--r-full);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+      transition: background .15s;
+    }
+    .nav-hamburger:hover { background: rgba(255,255,255,.14); }
+    .nav-hamburger span {
+      display: block;
+      width: 15px; height: 1.5px;
+      background: rgba(255,255,255,.75);
+      border-radius: 2px;
+      transition: transform .2s, opacity .2s;
+    }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+
+    /* ─── CTA button ────────────────────────────────────────── */
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: linear-gradient(135deg, #C85828 0%, #D46835 100%);
+      color: #fff;
+      font-size: .84rem;
+      font-weight: 700;
+      padding: 9px 22px;
+      border-radius: var(--r-full);
+      text-decoration: none;
+      letter-spacing: .015em;
+      flex-shrink: 0;
+      box-shadow:
+        0 3px 14px var(--cta-shadow),
+        0 1px  3px rgba(200,88,40,.25),
+        inset 0 1px 0 rgba(255,255,255,.15);
+      transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .nav-cta:hover {
+      background: linear-gradient(135deg, #D96B35 0%, #E07B42 100%);
+      transform: translateY(-1.5px) scale(1.015);
+      box-shadow:
+        0 6px 24px rgba(200,88,40,.55),
+        0 2px  6px rgba(200,88,40,.3),
+        inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    .nav-cta:active {
+      transform: translateY(0) scale(1);
+      box-shadow: 0 2px 8px var(--cta-shadow);
+    }
+    .cta-arrow {
+      font-size: .8rem;
+      transition: transform .15s;
+    }
+    .nav-cta:hover .cta-arrow { transform: translateX(2px); }
+
+    /* Mobile dropdown */
+    .nav-mobile-menu {
+      display: none;
+      max-width: 980px;
+      margin: 10px auto 0;
+      background: linear-gradient(145deg, #0D2419, #0B1F14);
+      border: 1px solid var(--nav-border);
+      border-radius: var(--r-xl);
+      padding: 10px;
+      gap: 2px;
+      flex-direction: column;
+      box-shadow: 0 8px 32px rgba(6,18,10,.35);
+    }
+    .nav-mobile-menu.open { display: flex; }
+    .nav-mobile-menu .nav-link {
+      padding: 11px 18px;
+      border-radius: var(--r-md);
+      font-size: .9rem;
+    }
+    .nav-mobile-menu .nav-link.active::after { display: none; }
+
+    /* ═══════════════════════════════════════════════════════════
+       DEMO PAGE CONTENT
+    ═══════════════════════════════════════════════════════════ */
+    .page {
+      max-width: 980px;
+      margin: 3.5rem auto 5rem;
+      padding: 0 1.5rem;
+    }
+
+    /* ─── Hero ──────────────────────────────────────────────── */
+    .hero {
+      background:
+        radial-gradient(ellipse 65% 80% at 92% -15%, rgba(82,183,136,.20) 0%, transparent 52%),
+        radial-gradient(ellipse 45% 60% at -3% 105%, rgba(20,80,45,.26) 0%, transparent 50%),
+        linear-gradient(152deg, #081610 0%, #0E2118 35%, #152E20 65%, #1B4332 100%);
+      border-radius: var(--r-xl);
+      padding: 4rem 4rem 3.5rem;
+      margin-bottom: 2rem;
+      position: relative;
+      overflow: hidden;
+      box-shadow:
+        0 20px 64px rgba(6,18,10,.28),
+        0  6px 20px rgba(6,18,10,.16),
+        inset 0 1px 0 rgba(82,183,136,.10);
+      border: 1px solid rgba(82,183,136,.07);
+    }
+    /* Diagonal stripe texture */
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        -52deg, transparent, transparent 58px,
+        rgba(82,183,136,.018) 58px, rgba(82,183,136,.018) 59px
+      );
+      pointer-events: none;
+    }
+    /* Ambient bottom-right glow */
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: -30%; right: -5%;
+      width: 380px; height: 300px;
+      background: radial-gradient(ellipse, rgba(82,183,136,.15) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: #80CFA2;
+      background: rgba(82,183,136,.09);
+      border: 1px solid rgba(82,183,136,.22);
+      border-radius: var(--r-full);
+      padding: .32rem 1rem;
+      margin-bottom: 1.3rem;
+      position: relative;
+    }
+    .hero h1 {
+      font-size: 3.1rem;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1.04;
+      letter-spacing: -.045em;
+      margin-bottom: 1.1rem;
+      position: relative;
+      z-index: 1;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: #80CFA2;
+    }
+    .hero-sub {
+      font-size: 1.04rem;
+      color: rgba(168,223,192,.78);
+      line-height: 1.72;
+      max-width: 510px;
+      margin-bottom: 2.2rem;
+      position: relative;
+      z-index: 1;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      position: relative;
+      z-index: 1;
+    }
+    .btn-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: linear-gradient(135deg, #C85828 0%, #D46835 100%);
+      color: #fff;
+      font-weight: 700;
+      font-size: .9rem;
+      padding: 13px 28px;
+      border-radius: var(--r-full);
+      text-decoration: none;
+      box-shadow: 0 4px 20px rgba(200,88,40,.48);
+      transition: transform .15s, box-shadow .15s;
+      letter-spacing: .01em;
+    }
+    .btn-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(200,88,40,.58);
+    }
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255,255,255,.07);
+      color: rgba(255,255,255,.82);
+      font-weight: 600;
+      font-size: .9rem;
+      padding: 13px 28px;
+      border-radius: var(--r-full);
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.14);
+      transition: background .15s;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,.13); }
+
+    /* Hero stats strip */
+    .hero-stats {
+      display: flex;
+      gap: 0;
+      margin-top: 2.5rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(82,183,136,.12);
+      flex-wrap: wrap;
+    }
+    .hero-stat {
+      flex: 1;
+      min-width: 100px;
+      display: flex;
+      flex-direction: column;
+      padding-right: 2rem;
+      position: relative;
+    }
+    .hero-stat + .hero-stat::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 10%; bottom: 10%;
+      width: 1px;
+      background: rgba(82,183,136,.14);
+      margin-left: -1rem;
+    }
+    .hero-stat-val {
+      font-size: 1.9rem;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -.035em;
+      line-height: 1;
+    }
+    .hero-stat-lbl {
+      font-size: .6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .15em;
+      color: #80CFA2;
+      margin-top: .35rem;
+    }
+
+    /* ─── Feature cards ─────────────────────────────────────── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 1.1rem;
+      margin-bottom: 2rem;
+    }
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-bd);
+      border-radius: var(--r-xl);
+      padding: 1.55rem 1.7rem;
+      box-shadow: 0 2px 14px rgba(26,67,50,.06), 0 1px 3px rgba(26,67,50,.04);
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .feature-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 28px rgba(26,67,50,.10), 0 2px 6px rgba(26,67,50,.06);
+    }
+    .feature-icon {
+      width: 46px; height: 46px;
+      background: linear-gradient(135deg, #E3F5EA, #C8EEDD);
+      border: 1px solid #B0DFC4;
+      border-radius: var(--r-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      margin-bottom: 1.1rem;
+    }
+    .feature-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-hi);
+      margin-bottom: .4rem;
+      letter-spacing: -.015em;
+    }
+    .feature-card p {
+      font-size: .84rem;
+      color: var(--text-lo);
+      line-height: 1.62;
+    }
+    .feature-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: .8rem;
+      font-weight: 600;
+      color: #2D6A4F;
+      text-decoration: none;
+      margin-top: .9rem;
+      transition: gap .15s;
+    }
+    .feature-link:hover { gap: 7px; }
+
+    /* ─── Map preview section ───────────────────────────────── */
+    .map-preview {
+      background: var(--card-bg);
+      border: 1px solid var(--card-bd);
+      border-radius: var(--r-xl);
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(26,67,50,.08);
+      display: grid;
+      grid-template-columns: 1fr 380px;
+    }
+    .map-placeholder {
+      background:
+        linear-gradient(170deg, #1B4332 0%, #2D6A4F 40%, #40916C 100%);
+      min-height: 340px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .map-placeholder::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Cg fill='none' stroke='rgba(255,255,255,0.06)' stroke-width='1'%3E%3Cellipse cx='200' cy='150' rx='170' ry='120'/%3E%3Cellipse cx='200' cy='150' rx='130' ry='88'/%3E%3Cellipse cx='200' cy='150' rx='90' ry='58'/%3E%3Cellipse cx='200' cy='150' rx='50' ry='30'/%3E%3Cellipse cx='200' cy='150' rx='18' ry='11'/%3E%3C/g%3E%3C/svg%3E");
+      background-size: cover;
+    }
+    .map-dot {
+      width: 14px; height: 14px;
+      background: #52B788;
+      border-radius: 50%;
+      box-shadow: 0 0 0 4px rgba(82,183,136,.3), 0 0 20px rgba(82,183,136,.5);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(82,183,136,.3), 0 0 20px rgba(82,183,136,.4); }
+      50%       { box-shadow: 0 0 0 9px rgba(82,183,136,.12), 0 0 32px rgba(82,183,136,.6); }
+    }
+    .map-label {
+      color: rgba(255,255,255,.72);
+      font-size: .82rem;
+      font-weight: 500;
+      letter-spacing: .04em;
+    }
+    .map-info {
+      padding: 2rem 2.2rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .map-tag {
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: #40916C;
+      margin-bottom: .7rem;
+    }
+    .map-info h2 {
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: var(--text-hi);
+      letter-spacing: -.025em;
+      margin-bottom: .65rem;
+      line-height: 1.25;
+    }
+    .map-info p {
+      font-size: .87rem;
+      color: var(--text-lo);
+      line-height: 1.65;
+      margin-bottom: 1.4rem;
+    }
+    .map-stats {
+      display: flex;
+      gap: 1.4rem;
+      margin-bottom: 1.6rem;
+    }
+    .map-stat-item { display: flex; flex-direction: column; gap: 2px; }
+    .map-stat-n {
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: var(--text-hi);
+      letter-spacing: -.025em;
+    }
+    .map-stat-l {
+      font-size: .68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--text-lo);
+    }
+    .btn-map {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      align-self: flex-start;
+      background: var(--text-hi);
+      color: #fff;
+      font-weight: 700;
+      font-size: .85rem;
+      padding: 10px 22px;
+      border-radius: var(--r-full);
+      text-decoration: none;
+      box-shadow: 0 3px 12px rgba(26,67,50,.28);
+      transition: transform .15s, background .15s;
+    }
+    .btn-map:hover { background: #2D6A4F; transform: translateY(-1px); }
+
+    /* ═══════════════════════════════════════════════════════════
+       FOOTER
+    ═══════════════════════════════════════════════════════════ */
+    footer {
+      border-top: 1px solid #D3E8D8;
+      background: rgba(255,255,255,.5);
+      padding: 1.8rem 1.5rem;
+      text-align: center;
+    }
+    footer p {
+      font-size: .8rem;
+      color: var(--text-lo);
+    }
+    footer strong { color: var(--text-mid); font-weight: 600; }
+
+    /* ═══════════════════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 740px) {
+      .nav-capsule  { border-radius: var(--r-xl); padding: 7px 7px 7px 16px; }
+      .nav-links    { display: none; }
+      .nav-hamburger { display: flex; }
+
+      .hero         { padding: 2.8rem 2rem 2.4rem; }
+      .hero h1      { font-size: 2.2rem; }
+      .hero-stats   { gap: 1.2rem; }
+      .hero-stat + .hero-stat::before { display: none; }
+
+      .map-preview  { grid-template-columns: 1fr; }
+      .map-placeholder { min-height: 200px; }
+    }
+    @media (max-width: 480px) {
+      .nav-outer    { top: 10px; padding: 0 .9rem; }
+      .nav-brand-name { display: none; }
+      .hero h1      { font-size: 1.9rem; }
+      .features     { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════
+       NAVBAR
+  ═══════════════════════════════════════════════════════ -->
+  <header class="nav-outer" role="banner">
+    <nav aria-label="Navegación principal">
+      <!-- ── Capsule ─────────────────────────────────────── -->
+      <div class="nav-capsule">
+
+        <!-- Brand -->
+        <a href="#" class="nav-brand" aria-label="Campus Tree Explorer — inicio">
+          <div class="nav-logo" aria-hidden="true">
+            <!-- Leaf icon -->
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3C9.2 6.2 5.5 10.2 5.5 14.5a6.5 6.5 0 0 0 13 0C18.5 10.2 14.8 6.2 12 3z" fill="#52B788"/>
+              <path d="M12 14.5v5.5" stroke="#1B4332" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M12 17.5c-1.5 0-3-1.2-3-1.2" stroke="#1B4332" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <span class="nav-brand-name">Campus Tree Explorer</span>
+        </a>
+
+        <!-- Desktop links -->
+        <div class="nav-links" role="list">
+          <a href="#" class="nav-link active" role="listitem" aria-current="page">Mapa vivo</a>
+          <a href="#" class="nav-link" role="listitem">Identificar</a>
+          <a href="#" class="nav-link" role="listitem">Catálogo</a>
+          <a href="#" class="nav-link" role="listitem">Rutas</a>
+        </div>
+
+        <!-- Mobile hamburger -->
+        <button class="nav-hamburger" id="hamburger" aria-label="Abrir menú" aria-expanded="false" aria-controls="mobile-menu">
+          <span></span><span></span><span></span>
+        </button>
+
+        <!-- CTA -->
+        <a href="#" class="nav-cta" aria-label="Empezar a explorar el campus">
+          Explorar <span class="cta-arrow" aria-hidden="true">→</span>
+        </a>
+      </div>
+
+      <!-- ── Mobile dropdown ────────────────────────────── -->
+      <div class="nav-mobile-menu" id="mobile-menu" role="list" aria-label="Menú móvil">
+        <a href="#" class="nav-link active" role="listitem" aria-current="page">🗺 Mapa vivo</a>
+        <a href="#" class="nav-link" role="listitem">📷 Identificar</a>
+        <a href="#" class="nav-link" role="listitem">📚 Catálogo</a>
+        <a href="#" class="nav-link" role="listitem">🧭 Rutas</a>
+      </div>
+    </nav>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════
+       DEMO PAGE CONTENT
+  ═══════════════════════════════════════════════════════ -->
+  <main class="page" id="main">
+
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="hero-tag">
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="#52B788"><circle cx="4" cy="4" r="4"/></svg>
+        Arboretum &amp; Palmetum · UNAL Medellín
+      </div>
+      <h1 id="hero-heading">
+        Descubre los árboles<br>
+        de tu <em>campus</em>
+      </h1>
+      <p class="hero-sub">
+        Identifica 142 especies arbóreas con inteligencia artificial,
+        mapéalas en tiempo real y aprende sobre la biodiversidad
+        que te rodea cada día.
+      </p>
+      <div class="hero-actions">
+        <a href="#" class="btn-cta">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Identificar árbol
+        </a>
+        <a href="#" class="btn-ghost">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+          Ver mapa
+        </a>
+      </div>
+      <div class="hero-stats" role="list" aria-label="Estadísticas del modelo">
+        <div class="hero-stat" role="listitem">
+          <span class="hero-stat-val">142</span>
+          <span class="hero-stat-lbl">Especies</span>
+        </div>
+        <div class="hero-stat" role="listitem">
+          <span class="hero-stat-val">ConvNeXt</span>
+          <span class="hero-stat-lbl">Arquitectura</span>
+        </div>
+        <div class="hero-stat" role="listitem">
+          <span class="hero-stat-val">ONNX</span>
+          <span class="hero-stat-lbl">Inferencia CPU</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Feature cards -->
+    <section aria-label="Funcionalidades principales">
+      <div class="features">
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">📷</div>
+          <h3>Identificar</h3>
+          <p>Sube una foto o usa la cámara. El modelo analiza la imagen y devuelve las 3 especies más probables con su porcentaje de confianza.</p>
+          <a href="#" class="feature-link">Ir a identificar <span aria-hidden="true">→</span></a>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">🗺</div>
+          <h3>Mapa vivo</h3>
+          <p>Consulta el mapa satelital del campus con todos los árboles geolocalizados. Activa tu GPS para marcar nuevos árboles.</p>
+          <a href="#" class="feature-link">Ver mapa <span aria-hidden="true">→</span></a>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">📚</div>
+          <h3>Catálogo</h3>
+          <p>Ficha botánica completa: familia, morfología, distribución, usos, historia en Colombia y datos curiosos de cada especie.</p>
+          <a href="#" class="feature-link">Explorar catálogo <span aria-hidden="true">→</span></a>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon" aria-hidden="true">🧭</div>
+          <h3>Rutas</h3>
+          <p>Recorre las rutas guiadas del arboretum y el palmetum. Descubre los árboles más emblemáticos e históricos del campus.</p>
+          <a href="#" class="feature-link">Ver rutas <span aria-hidden="true">→</span></a>
+        </article>
+      </div>
+    </section>
+
+    <!-- Map preview -->
+    <section class="map-preview" aria-label="Vista previa del mapa del campus">
+      <div class="map-placeholder" aria-hidden="true">
+        <div class="map-dot"></div>
+        <span class="map-label">Campus UNAL Medellín</span>
+      </div>
+      <div class="map-info">
+        <p class="map-tag">🛰 Mapa satelital en vivo</p>
+        <h2>Cartografía viva del campus</h2>
+        <p>Cada árbol identificado queda geolocalizao en el mapa. Entre todos construimos el inventario arbóreo más completo de la UNAL.</p>
+        <div class="map-stats" aria-label="Datos del mapa">
+          <div class="map-stat-item">
+            <span class="map-stat-n">0</span>
+            <span class="map-stat-l">Mapeados</span>
+          </div>
+          <div class="map-stat-item">
+            <span class="map-stat-n">GPS</span>
+            <span class="map-stat-l">Precisión</span>
+          </div>
+          <div class="map-stat-item">
+            <span class="map-stat-n">Esri</span>
+            <span class="map-stat-l">Satélite</span>
+          </div>
+        </div>
+        <a href="#" class="btn-map">
+          Abrir mapa
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>
+      <strong>Campus Tree Explorer</strong> ·
+      Arboretum &amp; Palmetum, Universidad Nacional de Colombia, Medellín ·
+      Proyecto de investigación en biodiversidad y IA
+    </p>
+  </footer>
+
+  <!-- ═══════════════════════════════════════════════════════
+       INTERACTIONS
+  ═══════════════════════════════════════════════════════ -->
+  <script>
+    // ── Active link state ──────────────────────────────────
+    document.querySelectorAll('.nav-link, .nav-mobile-menu .nav-link').forEach(link => {
+      link.addEventListener('click', e => {
+        if (link.closest('.nav-links')) {
+          document.querySelectorAll('.nav-links .nav-link').forEach(l => l.classList.remove('active'));
+          document.querySelectorAll('.nav-mobile-menu .nav-link').forEach(l => l.classList.remove('active'));
+        } else {
+          document.querySelectorAll('.nav-mobile-menu .nav-link').forEach(l => l.classList.remove('active'));
+          document.querySelectorAll('.nav-links .nav-link').forEach(l => l.classList.remove('active'));
+        }
+        // Mark equivalent link in both menus
+        const text = link.textContent.replace(/[^\w\s]/g, '').trim().toLowerCase();
+        document.querySelectorAll('.nav-link').forEach(l => {
+          if (l.textContent.replace(/[^\w\s]/g, '').trim().toLowerCase() === text) {
+            l.classList.add('active');
+          }
+        });
+      });
+    });
+
+    // ── Mobile hamburger ───────────────────────────────────
+    const hamburger = document.getElementById('hamburger');
+    const mobileMenu = document.getElementById('mobile-menu');
+    hamburger.addEventListener('click', () => {
+      const isOpen = hamburger.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', isOpen);
+      hamburger.setAttribute('aria-label', isOpen ? 'Cerrar menú' : 'Abrir menú');
+      mobileMenu.classList.toggle('open', isOpen);
+    });
+
+    // Close mobile menu when a link is clicked
+    mobileMenu.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', () => {
+        hamburger.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        hamburger.setAttribute('aria-label', 'Abrir menú');
+        mobileMenu.classList.remove('open');
+      });
+    });
+
+    // Close on outside click
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.nav-outer')) {
+        hamburger.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        mobileMenu.classList.remove('open');
+      }
+    });
+  </script>
+</body>
+</html>

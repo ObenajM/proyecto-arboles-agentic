@@ -75,48 +75,54 @@ def inject_custom_css() -> None:
     st.markdown(
         """
         <style>
-        /* ── Google Font ──────────────────────────────────────────────────── */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        /* ── Google Fonts ─────────────────────────────────────────────────── */
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,700&display=swap');
 
         /* ── Design tokens ────────────────────────────────────────────────── */
         :root {
-            /* Forest spectrum */
-            --f-950:  #040E07;
-            --f-900:  #071510;
-            --f-800:  #0C1E17;
-            --f-700:  #112A20;
-            --f-600:  #173829;
-            --f-500:  #1F4A35;
-            --f-400:  #285E42;
-            --f-300:  #337352;
+            /* Botanical greens */
+            --f-950:  #061209;
+            --f-900:  #0A1E10;
+            --f-800:  #102818;
+            --f-700:  #173520;
+            --f-600:  #1B4332;
+            --f-500:  #2D6A4F;
+            --f-400:  #40916C;
+            --f-300:  #52B788;
 
-            /* Sage spectrum */
-            --s-700:  #2E6645;
-            --s-600:  #3A7D55;
-            --s-500:  #499468;
-            --s-400:  #5DAB7D;
-            --s-300:  #7DC095;
-            --s-200:  #A3D4B5;
-            --s-100:  #C8E8D4;
-            --s-50:   #E5F4EC;
+            /* Sage / mid greens */
+            --s-700:  #2D7046;
+            --s-600:  #38895A;
+            --s-500:  #48A06C;
+            --s-400:  #5DBF87;
+            --s-300:  #80CFA2;
+            --s-200:  #A8DFC0;
+            --s-100:  #CEEEDD;
+            --s-50:   #E8F7EE;
 
-            /* Neutral green-tinted */
-            --n-900:  #111E16;
-            --n-700:  #2C4034;
-            --n-500:  #506B5C;
-            --n-400:  #6B8A79;
-            --n-300:  #9CB5A8;
-            --n-200:  #C5D9CE;
-            --n-100:  #E2EDEA;
-            --n-50:   #F2F7F4;
-            --n-0:    #FAFCF9;
+            /* Warm neutrals */
+            --n-900:  #1A2419;
+            --n-700:  #2F4035;
+            --n-500:  #556B5D;
+            --n-400:  #728A7B;
+            --n-300:  #A0B8AB;
+            --n-200:  #C8D9D1;
+            --n-100:  #E3EDE8;
+            --n-50:   #F2F8F4;
+            --n-0:    #FAFDF8;
 
-            /* Accent — warm terra */
-            --terra:    #B3521A;
-            --terra-lt: #D46828;
-            --gold:     #C49230;
+            /* Amber — primary CTA accent */
+            --amber:    #D97706;
+            --amber-lt: #F59E0B;
+            --amber-bg: #FFFBEB;
+            --amber-bd: #FDE68A;
 
-            /* Semantic aliases (backward compat for existing HTML classes) */
+            /* Terra — warm danger/warning */
+            --terra:    #C0533A;
+            --terra-lt: #E06548;
+            --gold:     #D4A017;
+
+            /* Semantic aliases */
             --forest:      var(--f-600);
             --forest-mid:  var(--f-500);
             --sage:        var(--s-600);
@@ -125,7 +131,7 @@ def inject_custom_css() -> None:
             --mint-lt:     var(--s-50);
             --cream:       var(--n-50);
             --cream-lt:    var(--n-0);
-            --terra-lt:    #D46828;
+            --terra-lt:    #E06548;
             --text:        var(--n-900);
             --muted:       var(--n-500);
             --white:       #FFFFFF;
@@ -134,390 +140,456 @@ def inject_custom_css() -> None:
             --r-xs:  4px;
             --r-sm:  8px;
             --r-md:  12px;
-            --r-lg:  18px;
-            --r-xl:  24px;
-            --r-2xl: 32px;
+            --r-lg:  16px;
+            --r-xl:  22px;
+            --r-2xl: 28px;
+            --r-pill: 999px;
 
-            /* Shadow scale (green-tinted) */
-            --s-sm: 0 1px 4px rgba(7,21,16,.07), 0 2px 8px rgba(7,21,16,.05);
-            --s-md: 0 2px 10px rgba(7,21,16,.09), 0 6px 24px rgba(7,21,16,.07);
-            --s-lg: 0 6px 28px rgba(7,21,16,.13), 0 16px 48px rgba(7,21,16,.09);
-            --s-xl: 0 12px 48px rgba(7,21,16,.18), 0 32px 80px rgba(7,21,16,.12);
+            /* Shadow scale */
+            --sh-xs: 0 1px 3px rgba(26,67,50,.06), 0 1px 2px rgba(26,67,50,.04);
+            --sh-sm: 0 2px 6px rgba(26,67,50,.08), 0 1px 3px rgba(26,67,50,.05);
+            --sh-md: 0 4px 16px rgba(26,67,50,.10), 0 2px 8px rgba(26,67,50,.06);
+            --sh-lg: 0 8px 32px rgba(26,67,50,.14), 0 4px 12px rgba(26,67,50,.08);
+            --sh-xl: 0 16px 56px rgba(26,67,50,.20), 0 8px 24px rgba(26,67,50,.12);
+            /* Legacy aliases */
+            --s-sm: var(--sh-sm);
+            --s-md: var(--sh-md);
+            --s-lg: var(--sh-lg);
+            --s-xl: var(--sh-xl);
         }
 
         /* ── Base reset ───────────────────────────────────────────────────── */
         .stApp {
-            background: linear-gradient(160deg, var(--n-0) 0%, var(--s-50) 45%, var(--n-0) 100%) !important;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(145deg, #FAFDF8 0%, #EFF7F2 40%, #FAFDF8 100%) !important;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
             color: var(--text);
             -webkit-font-smoothing: antialiased;
         }
         h1,h2,h3,h4,h5 {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Fraunces', Georgia, serif;
             color: var(--f-600);
             letter-spacing: -.02em;
         }
-        p { color: var(--n-700); line-height: 1.7; }
+        p { color: var(--n-700); line-height: 1.7; font-family: 'Outfit', sans-serif; }
 
         /* ── Hero ─────────────────────────────────────────────────────────── */
         .hero-wrap {
             background:
-                radial-gradient(ellipse 80% 60% at 90% -10%, rgba(61,125,85,.18) 0%, transparent 60%),
-                radial-gradient(ellipse 50% 70% at -5% 110%, rgba(35,79,53,.22) 0%, transparent 55%),
-                linear-gradient(148deg, var(--f-950) 0%, var(--f-900) 30%, var(--f-800) 60%, var(--f-700) 100%);
+                radial-gradient(ellipse 70% 80% at 95% -20%, rgba(82,183,136,.22) 0%, transparent 55%),
+                radial-gradient(ellipse 50% 60% at -5% 100%, rgba(29,91,55,.28) 0%, transparent 55%),
+                linear-gradient(150deg, #061209 0%, #0D1E12 35%, #152B1C 65%, #1B4332 100%);
             border-radius: var(--r-2xl);
-            padding: 3.6rem 4rem 3.2rem;
-            margin-bottom: 2.5rem;
+            padding: 3.2rem 3.8rem 2.8rem;
+            margin-bottom: 2rem;
             position: relative;
             overflow: hidden;
-            box-shadow: var(--s-xl), inset 0 1px 0 rgba(163,212,181,.08);
-            border: 1px solid rgba(163,212,181,.06);
+            box-shadow: var(--sh-xl), inset 0 1px 0 rgba(168,223,192,.10);
+            border: 1px solid rgba(168,223,192,.08);
         }
         .hero-wrap::before {
             content: '';
             position: absolute;
             inset: 0;
-            background: repeating-linear-gradient(
-                -45deg,
-                transparent,
-                transparent 80px,
-                rgba(163,212,181,.018) 80px,
-                rgba(163,212,181,.018) 81px
-            );
+            background:
+                repeating-linear-gradient(-55deg, transparent, transparent 60px,
+                rgba(168,223,192,.015) 60px, rgba(168,223,192,.015) 61px);
+            pointer-events: none;
+        }
+        .hero-wrap::after {
+            content: '';
+            position: absolute;
+            bottom: 0; right: 0;
+            width: 340px; height: 240px;
+            background: radial-gradient(ellipse at 100% 100%, rgba(82,183,136,.12) 0%, transparent 65%);
             pointer-events: none;
         }
         .hero-eyebrow {
             display: inline-flex;
             align-items: center;
-            gap: .45rem;
-            font-size: .65rem;
-            font-weight: 700;
-            letter-spacing: .2em;
+            gap: .5rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .68rem;
+            font-weight: 600;
+            letter-spacing: .18em;
             text-transform: uppercase;
             color: var(--s-300);
-            margin-bottom: 1.1rem;
-            background: rgba(125,192,149,.08);
-            border: 1px solid rgba(125,192,149,.2);
-            border-radius: 999px;
-            padding: .32rem 1rem;
+            margin-bottom: 1rem;
+            background: rgba(168,223,192,.07);
+            border: 1px solid rgba(168,223,192,.18);
+            border-radius: var(--r-pill);
+            padding: .3rem 1rem;
         }
         .hero-title {
-            font-size: 3.2rem;
+            font-family: 'Fraunces', Georgia, serif;
+            font-size: 3rem;
             font-weight: 900;
             color: #fff !important;
             line-height: 1.0;
-            margin: 0 0 1rem;
-            letter-spacing: -.04em;
-            text-shadow: 0 2px 20px rgba(0,0,0,.25);
+            margin: 0 0 .9rem;
+            letter-spacing: -.03em;
         }
         .hero-sub {
-            font-size: 1.05rem;
-            color: rgba(163,212,181,.80);
-            line-height: 1.72;
-            max-width: 560px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            color: rgba(168,223,192,.78);
+            line-height: 1.75;
+            max-width: 540px;
             margin: 0;
             font-weight: 400;
         }
         .hero-stat-row {
             display: flex;
-            gap: 2.8rem;
-            margin-top: 2.2rem;
-            padding-top: 1.9rem;
-            border-top: 1px solid rgba(125,192,149,.12);
+            gap: 0;
+            margin-top: 2rem;
+            padding-top: 1.6rem;
+            border-top: 1px solid rgba(168,223,192,.10);
             flex-wrap: wrap;
         }
-        .hero-stat { display: flex; flex-direction: column; }
+        .hero-stat {
+            display: flex;
+            flex-direction: column;
+            padding-right: 2.4rem;
+            margin-right: 2.4rem;
+            border-right: 1px solid rgba(168,223,192,.10);
+        }
+        .hero-stat:last-child { border-right: none; }
         .hero-stat-val {
+            font-family: 'Fraunces', serif;
             font-size: 2rem;
-            font-weight: 900;
+            font-weight: 700;
             color: #fff;
             line-height: 1;
-            letter-spacing: -.03em;
+            letter-spacing: -.02em;
         }
         .hero-stat-lbl {
-            font-size: .62rem;
-            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+            font-size: .63rem;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: .14em;
-            color: var(--s-300);
-            margin-top: .35rem;
+            letter-spacing: .12em;
+            color: rgba(168,223,192,.58);
+            margin-top: .4rem;
         }
 
         /* ── Section headers ──────────────────────────────────────────────── */
         .section-head {
             display: flex;
             align-items: flex-start;
-            gap: .9rem;
-            margin-bottom: 1.25rem;
-            padding-bottom: 1.1rem;
-            border-bottom: 1px solid var(--n-100);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.25rem;
+            border-bottom: 2px solid var(--n-100);
         }
         .section-head-icon {
-            width: 42px; height: 42px;
-            background: linear-gradient(135deg, var(--f-500) 0%, var(--f-600) 100%);
+            width: 44px; height: 44px;
+            background: linear-gradient(145deg, var(--f-400) 0%, var(--f-600) 100%);
             border-radius: var(--r-md);
             display: flex; align-items: center; justify-content: center;
-            font-size: 1.15rem;
+            font-size: 1.2rem;
             flex-shrink: 0;
-            box-shadow: var(--s-sm);
+            box-shadow: var(--sh-sm), 0 0 0 4px rgba(64,145,108,.10);
         }
         .section-head-title {
-            font-size: 1.3rem;
-            font-weight: 800;
+            font-family: 'Fraunces', serif;
+            font-size: 1.4rem;
+            font-weight: 700;
             color: var(--f-600);
-            letter-spacing: -.025em;
-            margin: .1rem 0 0;
+            letter-spacing: -.02em;
+            margin: .05rem 0 0;
             line-height: 1.2;
         }
         .section-head-sub {
-            font-size: .82rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .84rem;
             color: var(--n-500);
-            margin: .3rem 0 0;
+            margin: .35rem 0 0;
             line-height: 1.5;
+            font-weight: 400;
         }
 
-        /* ── Prediction — top result ──────────────────────────────────────── */
+        /* ── Prediction card ──────────────────────────────────────────────── */
         .pred-card {
             background: var(--white);
-            border: 1px solid var(--n-100);
+            border: 1.5px solid var(--n-100);
             border-radius: var(--r-xl);
-            padding: 1.8rem 2.1rem;
-            margin-bottom: .9rem;
-            box-shadow: var(--s-md);
+            padding: 1.75rem 2rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--sh-md);
             position: relative;
             overflow: hidden;
+            transition: box-shadow .2s;
         }
         .pred-card::before {
             content: '';
             position: absolute;
             top: 0; left: 0;
-            width: 4px; height: 100%;
-            background: linear-gradient(180deg, var(--terra) 0%, var(--gold) 100%);
-            border-radius: 4px 0 0 4px;
+            width: 5px; height: 100%;
+            background: linear-gradient(180deg, var(--f-400) 0%, var(--amber) 100%);
+            border-radius: 5px 0 0 5px;
         }
         .pred-card::after {
             content: '';
             position: absolute;
-            top: 0; right: 0;
-            width: 160px; height: 100%;
-            background: radial-gradient(ellipse at 100% 50%, rgba(93,171,125,.06) 0%, transparent 70%);
+            top: -20px; right: -20px;
+            width: 140px; height: 140px;
+            background: radial-gradient(circle, rgba(82,183,136,.07) 0%, transparent 70%);
             pointer-events: none;
         }
         .pred-rank-label {
-            font-size: .63rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .65rem;
             font-weight: 700;
-            letter-spacing: .16em;
+            letter-spacing: .15em;
             text-transform: uppercase;
-            color: var(--terra);
-            margin-bottom: .55rem;
+            color: var(--f-400);
+            margin-bottom: .6rem;
+            display: flex;
+            align-items: center;
+            gap: .4rem;
         }
         .pred-name {
-            font-size: 1.9rem;
-            font-weight: 900;
+            font-family: 'Fraunces', serif;
+            font-size: 2rem;
+            font-weight: 700;
             color: var(--f-600);
             line-height: 1.05;
-            margin-bottom: .3rem;
-            letter-spacing: -.035em;
+            margin-bottom: .35rem;
+            letter-spacing: -.03em;
         }
         .pred-sci {
+            font-family: 'Fraunces', serif;
             font-style: italic;
-            font-size: .93rem;
+            font-size: .97rem;
             color: var(--s-600);
-            margin-bottom: .65rem;
+            margin-bottom: .7rem;
             font-weight: 400;
         }
         .pred-conf-row {
             display: flex;
             align-items: center;
             gap: .7rem;
-            margin-top: .35rem;
+            margin-top: .4rem;
+            flex-wrap: wrap;
         }
         .pred-conf-pill {
-            font-size: .74rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .76rem;
             font-weight: 700;
-            padding: .3rem .9rem;
-            border-radius: 999px;
+            padding: .3rem 1rem;
+            border-radius: var(--r-pill);
             letter-spacing: .02em;
         }
-        .pill-green { background: #E2F5EA; color: #145E32; border: 1px solid #9FD8B5; }
-        .pill-amber { background: #FEF3E2; color: #7A4500; border: 1px solid #EFC470; }
-        .pill-red   { background: #FDEAEA; color: #8A2020; border: 1px solid #EEAAAA; }
-        .pred-conf-text { font-size: .87rem; color: var(--n-500); }
+        .pill-green { background: #DCFCE7; color: #14532D; border: 1px solid #86EFAC; }
+        .pill-amber { background: #FEF9C3; color: #713F12; border: 1px solid #FDE047; }
+        .pill-red   { background: #FEE2E2; color: #7F1D1D; border: 1px solid #FCA5A5; }
+        .pred-conf-text {
+            font-family: 'Outfit', sans-serif;
+            font-size: .88rem;
+            color: var(--n-500);
+        }
 
-        /* ── Prediction — alternatives ────────────────────────────────────── */
+        /* ── Prediction alternatives ──────────────────────────────────────── */
         .pred-alts-label {
-            font-size: .67rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .68rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .13em;
-            color: var(--s-500);
-            margin: 1.1rem 0 .55rem;
+            color: var(--n-400);
+            margin: 1.2rem 0 .6rem;
         }
         .pred-alt-row {
             background: var(--n-50);
-            border: 1px solid var(--n-100);
-            border-radius: var(--r-md);
-            padding: .75rem 1.1rem;
-            margin-bottom: .4rem;
+            border: 1.5px solid var(--n-100);
+            border-radius: var(--r-lg);
+            padding: .8rem 1.15rem;
+            margin-bottom: .45rem;
             display: flex;
             align-items: center;
             gap: 1rem;
-            transition: background .12s;
+            transition: background .15s, border-color .15s, transform .15s;
         }
-        .pred-alt-row:hover { background: var(--s-50); }
-        .pred-alt-medal { font-size: 1rem; flex-shrink: 0; }
-        .pred-alt-name  { font-size: .94rem; font-weight: 600; color: var(--f-600); flex: 1; }
-        .pred-alt-pct   { font-size: .9rem; font-weight: 800; color: var(--terra); white-space: nowrap; }
+        .pred-alt-row:hover {
+            background: var(--s-50);
+            border-color: var(--s-200);
+            transform: translateX(2px);
+        }
+        .pred-alt-medal { font-size: 1.05rem; flex-shrink: 0; }
+        .pred-alt-name  { font-family: 'Outfit', sans-serif; font-size: .95rem; font-weight: 600; color: var(--f-600); flex: 1; }
+        .pred-alt-pct   { font-family: 'Fraunces', serif; font-size: .95rem; font-weight: 700; color: var(--terra); white-space: nowrap; }
 
         /* ── Alert banners ────────────────────────────────────────────────── */
         .alert-warn {
-            background: #FFF8EE;
-            border: 1px solid #F5CC80;
+            background: linear-gradient(135deg, #FFF7ED 0%, #FFF4E6 100%);
+            border: 1.5px solid #FED7AA;
             border-left: 4px solid var(--terra);
             border-radius: 0 var(--r-md) var(--r-md) 0;
-            padding: .9rem 1.1rem;
-            font-size: .87rem;
-            color: #5A3200;
-            margin: .65rem 0;
-            line-height: 1.55;
+            padding: 1rem 1.2rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .88rem;
+            color: #7C2D12;
+            margin: .7rem 0;
+            line-height: 1.6;
         }
         .alert-tip {
-            background: #EFF6FF;
-            border: 1px solid #BFDBFE;
+            background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+            border: 1.5px solid #BFDBFE;
             border-left: 4px solid #3B82F6;
             border-radius: 0 var(--r-md) var(--r-md) 0;
-            padding: .9rem 1.1rem;
-            font-size: .87rem;
-            color: #1E3A70;
-            margin: .65rem 0;
-            line-height: 1.55;
+            padding: 1rem 1.2rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .88rem;
+            color: #1E3A8A;
+            margin: .7rem 0;
+            line-height: 1.6;
         }
 
         /* ── Species info card ────────────────────────────────────────────── */
         .info-card {
             background: var(--white);
-            border: 1px solid var(--n-100);
+            border: 1.5px solid var(--n-100);
             border-radius: var(--r-xl);
-            padding: 2rem 2.3rem;
-            box-shadow: var(--s-md);
+            padding: 2rem 2.4rem;
+            box-shadow: var(--sh-md);
         }
         .info-title {
-            font-size: 1.65rem;
-            font-weight: 800;
+            font-family: 'Fraunces', serif;
+            font-size: 1.8rem;
+            font-weight: 700;
             color: var(--f-600);
-            margin: 0 0 .3rem;
-            letter-spacing: -.03em;
+            margin: 0 0 .35rem;
+            letter-spacing: -.025em;
         }
         .info-sci {
+            font-family: 'Fraunces', serif;
             font-style: italic;
-            font-size: .95rem;
+            font-size: .98rem;
             color: var(--s-600);
-            margin-bottom: 1.1rem;
+            margin-bottom: 1.2rem;
+            font-weight: 400;
         }
 
         /* ── Pills ────────────────────────────────────────────────────────── */
-        .pills { display: flex; flex-wrap: wrap; gap: .45rem; margin: .65rem 0 1.1rem; }
+        .pills { display: flex; flex-wrap: wrap; gap: .5rem; margin: .7rem 0 1.2rem; }
         .pill {
             background: var(--n-50);
-            border: 1px solid var(--n-200);
-            border-radius: 999px;
-            padding: .26rem .88rem;
-            font-size: .79rem;
+            border: 1.5px solid var(--n-200);
+            border-radius: var(--r-pill);
+            padding: .3rem .95rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .8rem;
             color: var(--n-700);
             font-weight: 500;
         }
-        .pill b { color: var(--f-600); font-weight: 700; }
+        .pill b { color: var(--f-500); font-weight: 700; }
 
         /* ── Section label ────────────────────────────────────────────────── */
         .sec-lbl {
-            font-size: .64rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .66rem;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: .14em;
-            color: var(--s-500);
-            margin: 1.2rem 0 .38rem;
+            letter-spacing: .15em;
+            color: var(--f-400);
+            margin: 1.3rem 0 .4rem;
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+        }
+        .sec-lbl::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--n-100);
         }
 
         /* ── Historia card ────────────────────────────────────────────────── */
         .historia-card {
-            background: linear-gradient(135deg, var(--s-50) 0%, rgba(163,212,181,.18) 100%);
-            border: 1px solid var(--s-100);
+            background: linear-gradient(135deg, var(--s-50) 0%, #E0F5EA 100%);
+            border: 1.5px solid var(--s-100);
             border-radius: var(--r-lg);
-            padding: 1.3rem 1.55rem;
-            margin-top: 1rem;
+            padding: 1.4rem 1.6rem;
+            margin-top: 1.2rem;
         }
         .historia-title {
-            font-size: .64rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .66rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .14em;
-            color: var(--s-600);
-            margin-bottom: .5rem;
+            color: var(--f-400);
+            margin-bottom: .6rem;
         }
 
         /* ── Fun-fact card ────────────────────────────────────────────────── */
         .fact-card {
-            background: linear-gradient(135deg, #FFFAF2 0%, #FFF4E2 100%);
-            border: 1px solid #F5CC80;
-            border-left: 4px solid var(--terra);
+            background: linear-gradient(135deg, var(--amber-bg) 0%, #FFFBEB 100%);
+            border: 1.5px solid var(--amber-bd);
+            border-left: 4px solid var(--amber);
             border-radius: 0 var(--r-md) var(--r-md) 0;
-            padding: .9rem 1.15rem;
-            font-size: .88rem;
-            color: #3E2100;
-            margin: .85rem 0;
-            line-height: 1.62;
+            padding: 1rem 1.2rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .9rem;
+            color: #451A03;
+            margin: .9rem 0;
+            line-height: 1.65;
         }
 
         /* ── Quiz / trivia ────────────────────────────────────────────────── */
         .quiz-wrap {
             background: var(--white);
-            border: 1px solid var(--n-100);
+            border: 1.5px solid var(--n-100);
             border-radius: var(--r-xl);
-            padding: 2rem 2.3rem;
-            box-shadow: var(--s-md);
+            padding: 2rem 2.4rem;
+            box-shadow: var(--sh-md);
         }
         .quiz-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 1.1rem;
+            margin-bottom: 1.2rem;
+            flex-wrap: wrap;
+            gap: .5rem;
         }
         .quiz-counter {
-            font-size: .68rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .7rem;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: .13em;
-            color: var(--terra);
-            background: #FEF5E8;
-            border: 1px solid #F5CC80;
-            border-radius: 999px;
-            padding: .28rem .85rem;
+            letter-spacing: .12em;
+            color: var(--amber);
+            background: var(--amber-bg);
+            border: 1.5px solid var(--amber-bd);
+            border-radius: var(--r-pill);
+            padding: .3rem .9rem;
         }
         .quiz-q {
-            font-size: 1.1rem;
-            font-weight: 700;
+            font-family: 'Fraunces', serif;
+            font-size: 1.2rem;
+            font-weight: 600;
             color: var(--f-600);
-            line-height: 1.55;
-            margin-bottom: 1.1rem;
+            line-height: 1.5;
+            margin-bottom: 1.2rem;
         }
         .score-wrap {
             display: inline-flex;
             align-items: center;
-            gap: .7rem;
-            background: var(--s-50);
-            border: 1px solid var(--s-100);
+            gap: .75rem;
+            background: linear-gradient(135deg, var(--s-50) 0%, #DDF4E9 100%);
+            border: 1.5px solid var(--s-100);
             border-radius: var(--r-lg);
-            padding: .6rem 1.3rem;
-            font-size: .92rem;
+            padding: .65rem 1.4rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .93rem;
             color: var(--n-700);
-            margin-top: 1.1rem;
+            margin-top: 1.2rem;
         }
-        .score-wrap b { color: var(--f-600); font-weight: 800; }
+        .score-wrap b { color: var(--f-500); font-weight: 800; }
 
         /* ── Sidebar ──────────────────────────────────────────────────────── */
         section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, var(--f-950) 0%, var(--f-900) 60%, var(--f-800) 100%) !important;
-            border-right: 1px solid rgba(125,192,149,.06) !important;
+            background: linear-gradient(170deg, #061209 0%, #0D2117 45%, #132D1E 100%) !important;
+            border-right: 1px solid rgba(82,183,136,.08) !important;
         }
         section[data-testid="stSidebar"] .stMarkdown p,
         section[data-testid="stSidebar"] .stMarkdown li,
@@ -525,7 +597,8 @@ def inject_custom_css() -> None:
         section[data-testid="stSidebar"] label,
         section[data-testid="stSidebar"] .stCaption,
         section[data-testid="stSidebar"] small {
-            color: rgba(163,212,181,.65) !important;
+            color: rgba(168,223,192,.60) !important;
+            font-family: 'Outfit', sans-serif !important;
         }
         section[data-testid="stSidebar"] h1,
         section[data-testid="stSidebar"] h2,
@@ -534,151 +607,286 @@ def inject_custom_css() -> None:
             color: rgba(255,255,255,.92) !important;
         }
         section[data-testid="stSidebar"] hr {
-            border-color: rgba(125,192,149,.10) !important;
+            border-color: rgba(82,183,136,.10) !important;
         }
         .sidebar-brand {
             display: flex;
             align-items: center;
-            gap: .7rem;
-            margin-bottom: .4rem;
+            gap: .75rem;
+            margin-bottom: .5rem;
         }
         .sidebar-brand-icon {
-            width: 38px; height: 38px;
-            background: linear-gradient(135deg, var(--s-700), var(--f-500));
-            border-radius: var(--r-sm);
+            width: 40px; height: 40px;
+            background: linear-gradient(135deg, var(--f-400), var(--f-600));
+            border-radius: var(--r-md);
             display: flex; align-items: center; justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.25rem;
             flex-shrink: 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,.3);
+            box-shadow: 0 3px 12px rgba(0,0,0,.35), 0 0 0 3px rgba(82,183,136,.12);
         }
         .sidebar-brand-name {
-            font-size: 1.05rem;
-            font-weight: 800;
+            font-family: 'Fraunces', serif;
+            font-size: 1.1rem;
+            font-weight: 700;
             color: #fff !important;
             letter-spacing: -.02em;
             line-height: 1.2;
         }
         .sidebar-section {
-            font-size: .6rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .62rem;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: .18em;
-            color: var(--s-300) !important;
-            margin: 1.3rem 0 .5rem;
+            letter-spacing: .2em;
+            color: rgba(82,183,136,.65) !important;
+            margin: 1.5rem 0 .55rem;
         }
         .sidebar-stat {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: .38rem 0;
-            border-bottom: 1px solid rgba(125,192,149,.07);
+            padding: .42rem 0;
+            border-bottom: 1px solid rgba(82,183,136,.06);
         }
-        .sidebar-stat-key { font-size: .81rem; color: rgba(163,212,181,.52) !important; }
-        .sidebar-stat-val { font-size: .81rem; font-weight: 700; color: rgba(255,255,255,.88) !important; }
+        .sidebar-stat-key {
+            font-family: 'Outfit', sans-serif;
+            font-size: .82rem;
+            color: rgba(168,223,192,.48) !important;
+        }
+        .sidebar-stat-val {
+            font-family: 'Outfit', sans-serif;
+            font-size: .82rem;
+            font-weight: 700;
+            color: rgba(255,255,255,.88) !important;
+        }
         .sidebar-sync-off {
-            background: rgba(125,192,149,.06);
-            border: 1px solid rgba(125,192,149,.12);
+            background: rgba(82,183,136,.05);
+            border: 1px solid rgba(82,183,136,.12);
             border-radius: var(--r-md);
-            padding: .55rem .9rem;
-            font-size: .77rem;
-            color: rgba(163,212,181,.52) !important;
+            padding: .6rem 1rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .78rem;
+            color: rgba(168,223,192,.48) !important;
             margin-top: .5rem;
-            line-height: 1.5;
+            line-height: 1.55;
         }
         .sidebar-sync-on {
-            background: rgba(61,125,85,.18);
-            border: 1px solid rgba(93,171,125,.28);
+            background: rgba(64,145,108,.16);
+            border: 1px solid rgba(82,183,136,.25);
             border-radius: var(--r-md);
-            padding: .55rem .9rem;
-            font-size: .77rem;
-            color: var(--s-300) !important;
+            padding: .6rem 1rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .78rem;
+            color: rgba(128,207,162,.85) !important;
             margin-top: .5rem;
-            line-height: 1.5;
+            line-height: 1.55;
+        }
+        .sidebar-species-item {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .28rem 0;
+        }
+        .sidebar-species-dot {
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            background: rgba(82,183,136,.45);
+            flex-shrink: 0;
         }
 
-        /* ── Tabs ─────────────────────────────────────────────────────────── */
+        /* ── Tabs — pill navigation ───────────────────────────────────────── */
         .stTabs [data-baseweb="tab-list"] {
-            background: transparent;
-            gap: .25rem;
-            border-bottom: 2px solid var(--n-100);
-            padding-bottom: 0;
-            margin-bottom: 1.5rem;
+            background: var(--n-50);
+            gap: .3rem;
+            border-bottom: none !important;
+            border-radius: var(--r-xl);
+            padding: .35rem;
+            margin-bottom: 1.8rem;
+            border: 1.5px solid var(--n-100);
         }
         .stTabs [data-baseweb="tab"] {
+            font-family: 'Outfit', sans-serif;
             font-weight: 600;
-            font-size: .87rem;
+            font-size: .88rem;
             color: var(--n-500);
-            padding: .72rem 1.3rem;
+            padding: .62rem 1.4rem;
             background: transparent;
-            border: none;
-            border-radius: var(--r-md) var(--r-md) 0 0;
-            transition: color .15s, background .15s;
+            border: none !important;
+            border-radius: var(--r-lg);
+            transition: color .18s, background .18s;
+            letter-spacing: .01em;
         }
         .stTabs [data-baseweb="tab"]:hover {
             color: var(--f-600);
-            background: var(--n-50);
+            background: rgba(255,255,255,.75);
         }
         .stTabs [aria-selected="true"] {
             color: var(--f-600) !important;
             font-weight: 800 !important;
             background: var(--white) !important;
-            border: 2px solid var(--n-100) !important;
-            border-bottom: 2px solid var(--white) !important;
-            margin-bottom: -2px;
+            border: none !important;
+            box-shadow: var(--sh-sm) !important;
+            margin-bottom: 0 !important;
         }
+        .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+        .stTabs [data-baseweb="tab-border"] { display: none !important; }
 
         /* ── Buttons ──────────────────────────────────────────────────────── */
         div.stButton > button {
-            border-radius: var(--r-md);
-            background: linear-gradient(135deg, var(--f-400) 0%, var(--f-500) 100%);
-            border: 1px solid rgba(255,255,255,.08);
+            font-family: 'Outfit', sans-serif;
+            border-radius: var(--r-lg);
+            background: linear-gradient(145deg, var(--f-400) 0%, var(--f-600) 100%);
+            border: 1px solid rgba(255,255,255,.07);
             color: #fff;
             font-weight: 700;
-            font-size: .86rem;
-            padding: .58rem 1.55rem;
-            letter-spacing: .015em;
-            transition: all .18s ease;
-            box-shadow: 0 2px 6px rgba(7,21,16,.25), 0 1px 2px rgba(7,21,16,.12),
-                        inset 0 1px 0 rgba(255,255,255,.09);
+            font-size: .88rem;
+            padding: .6rem 1.6rem;
+            letter-spacing: .01em;
+            transition: all .2s ease;
+            box-shadow: 0 3px 8px rgba(27,67,50,.30), 0 1px 3px rgba(27,67,50,.15),
+                        inset 0 1px 0 rgba(255,255,255,.10);
         }
         div.stButton > button:hover {
-            background: linear-gradient(135deg, var(--f-300) 0%, var(--f-400) 100%) !important;
+            background: linear-gradient(145deg, var(--f-300) 0%, var(--f-400) 100%) !important;
             color: #fff !important;
-            transform: translateY(-1.5px);
-            box-shadow: 0 6px 20px rgba(7,21,16,.30), 0 2px 6px rgba(7,21,16,.15),
-                        inset 0 1px 0 rgba(255,255,255,.12) !important;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 22px rgba(27,67,50,.34), 0 3px 8px rgba(27,67,50,.18),
+                        inset 0 1px 0 rgba(255,255,255,.14) !important;
         }
         div.stButton > button:active {
             transform: translateY(0) !important;
-            box-shadow: 0 2px 6px rgba(7,21,16,.20) !important;
+            box-shadow: 0 2px 6px rgba(27,67,50,.22) !important;
+        }
+
+        /* ── Radio pills ──────────────────────────────────────────────────── */
+        div.stRadio > div {
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: .4rem;
+        }
+        div.stRadio > div > label {
+            font-family: 'Outfit', sans-serif;
+            background: var(--n-50);
+            border: 1.5px solid var(--n-200);
+            border-radius: var(--r-pill);
+            padding: .42rem 1rem;
+            font-size: .86rem;
+            font-weight: 500;
+            color: var(--n-700);
+            cursor: pointer;
+            transition: all .15s;
+        }
+        div.stRadio > div > label:hover {
+            border-color: var(--f-400);
+            color: var(--f-600);
+            background: var(--s-50);
         }
 
         /* ── Progress bar ─────────────────────────────────────────────────── */
         .stProgress > div > div > div > div {
-            background: linear-gradient(90deg, var(--terra) 0%, var(--gold) 100%);
-            border-radius: 999px;
+            background: linear-gradient(90deg, var(--f-400) 0%, var(--s-300) 100%);
+            border-radius: var(--r-pill);
+        }
+        .stProgress > div > div {
+            background: var(--n-100);
+            border-radius: var(--r-pill);
+        }
+
+        /* ── Selectbox ────────────────────────────────────────────────────── */
+        div[data-testid="stSelectbox"] > div > div {
+            font-family: 'Outfit', sans-serif !important;
+            font-size: .92rem;
+            border-radius: var(--r-lg) !important;
+            border: 1.5px solid var(--n-200) !important;
+            background: var(--white) !important;
+            box-shadow: var(--sh-xs) !important;
         }
 
         /* ── Upload zone ──────────────────────────────────────────────────── */
         div[data-testid="stFileUploader"] {
-            border: 2px dashed var(--s-200) !important;
+            border: 2.5px dashed var(--s-200) !important;
             border-radius: var(--r-xl) !important;
-            background: var(--s-50) !important;
-            transition: border-color .15s, background .15s;
+            background: linear-gradient(135deg, var(--s-50) 0%, var(--n-0) 100%) !important;
+            transition: all .2s;
         }
         div[data-testid="stFileUploader"]:hover {
-            border-color: var(--s-400) !important;
-            background: rgba(163,212,181,.15) !important;
+            border-color: var(--f-400) !important;
+            background: linear-gradient(135deg, #D8F3E6 0%, var(--s-50) 100%) !important;
+        }
+        div[data-testid="stFileUploader"] > div {
+            font-family: 'Outfit', sans-serif !important;
         }
 
         /* ── Map container ────────────────────────────────────────────────── */
         .map-wrap {
             background: var(--white);
-            border: 1px solid var(--n-100);
+            border: 1.5px solid var(--n-100);
             border-radius: var(--r-xl);
-            padding: 1.1rem;
-            box-shadow: var(--s-md);
+            padding: 1rem;
+            box-shadow: var(--sh-md);
             overflow: hidden;
+        }
+
+        /* ── GPS / location cards ─────────────────────────────────────────── */
+        .location-card {
+            background: var(--white);
+            border: 1.5px solid var(--s-100);
+            border-radius: var(--r-lg);
+            padding: .85rem 1.1rem;
+            margin-bottom: .75rem;
+            box-shadow: var(--sh-xs);
+        }
+        .location-card-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: .65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .12em;
+            color: var(--f-400);
+            margin-bottom: .3rem;
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+        }
+        .location-card-coords {
+            font-family: 'Outfit', monospace;
+            font-size: .93rem;
+            color: var(--f-600);
+            font-weight: 600;
+        }
+        .location-card-meta {
+            font-family: 'Outfit', sans-serif;
+            font-size: .78rem;
+            color: var(--n-400);
+            margin-top: .15rem;
+        }
+
+        /* ── Stats chips ──────────────────────────────────────────────────── */
+        .stat-chip {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            background: var(--white);
+            border: 1.5px solid var(--n-100);
+            border-radius: var(--r-lg);
+            padding: .8rem 1.3rem;
+            box-shadow: var(--sh-xs);
+        }
+        .stat-chip-val {
+            font-family: 'Fraunces', serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--f-600);
+            line-height: 1;
+        }
+        .stat-chip-lbl {
+            font-family: 'Outfit', sans-serif;
+            font-size: .65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: var(--n-400);
+            margin-top: .3rem;
         }
 
         /* ── Empty state ──────────────────────────────────────────────────── */
@@ -687,20 +895,49 @@ def inject_custom_css() -> None:
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 4.5rem 2rem;
+            padding: 5rem 2rem;
             text-align: center;
         }
         .empty-state-icon {
-            font-size: 3.2rem;
-            margin-bottom: .9rem;
-            opacity: .45;
-            filter: saturate(0.6);
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            opacity: .40;
+            filter: saturate(0.5);
+        }
+        .empty-state-title {
+            font-family: 'Fraunces', serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--n-600, var(--n-500));
+            margin-bottom: .4rem;
         }
         .empty-state-text {
-            font-size: .95rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .92rem;
             line-height: 1.65;
-            max-width: 300px;
-            color: var(--n-500);
+            max-width: 280px;
+            color: var(--n-400);
+        }
+
+        /* ── Input / textarea ─────────────────────────────────────────────── */
+        .stTextInput input, .stTextArea textarea {
+            font-family: 'Outfit', sans-serif !important;
+            border-radius: var(--r-lg) !important;
+            border: 1.5px solid var(--n-200) !important;
+        }
+        .stTextInput input:focus, .stTextArea textarea:focus {
+            border-color: var(--f-400) !important;
+            box-shadow: 0 0 0 3px rgba(64,145,108,.12) !important;
+        }
+
+        /* ── Streamlit overrides ──────────────────────────────────────────── */
+        .stSpinner > div { border-top-color: var(--f-400) !important; }
+        div[data-testid="stMarkdownContainer"] p {
+            font-family: 'Outfit', sans-serif;
+        }
+        .stAlert {
+            border-radius: var(--r-lg) !important;
+            font-family: 'Outfit', sans-serif !important;
         }
         </style>
         """,
@@ -1388,12 +1625,17 @@ with st.sidebar:
         for k in class_names[:14]:
             label = get_info(k).get("nombre_comun") or clean_name(k)
             st.markdown(
-                f'<p style="font-size:.8rem;color:rgba(212,222,201,.7);margin:.15rem 0">· {_esc(label)}</p>',
+                f'<div class="sidebar-species-item">'
+                f'<span class="sidebar-species-dot"></span>'
+                f'<span style="font-family:Outfit,sans-serif;font-size:.81rem;'
+                f'color:rgba(168,223,192,.68)">{_esc(label)}</span>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
         if len(class_names) > 14:
             st.markdown(
-                f'<p style="font-size:.78rem;color:rgba(173,188,159,.55);margin:.3rem 0">'
+                f'<p style="font-family:Outfit,sans-serif;font-size:.78rem;'
+                f'color:rgba(82,183,136,.45);margin:.4rem 0 0;font-style:italic">'
                 f'… y {len(class_names) - 14} más — ver en Catálogo</p>',
                 unsafe_allow_html=True,
             )
@@ -1407,8 +1649,9 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        '<p style="font-size:.77rem;color:rgba(173,188,159,.5);line-height:1.5;margin:0">'
-        'Este clasificador es una herramienta de apoyo. '
+        '<p style="font-family:Outfit,sans-serif;font-size:.78rem;color:rgba(168,223,192,.42);'
+        'line-height:1.6;margin:0">'
+        'Este clasificador es una herramienta de apoyo educativo. '
         'Para identificaciones definitivas, consulta un especialista en botánica.</p>',
         unsafe_allow_html=True,
     )
@@ -1438,12 +1681,10 @@ st.markdown(
                 <span class="hero-stat-val">{len(class_names)}</span>
                 <span class="hero-stat-lbl">Especies</span>
             </div>
-            <div style="width:1px;background:rgba(125,192,149,.15);align-self:stretch"></div>
             <div class="hero-stat">
                 <span class="hero-stat-val">{_tree_count}</span>
                 <span class="hero-stat-lbl">Árboles mapeados</span>
             </div>
-            <div style="width:1px;background:rgba(125,192,149,.15);align-self:stretch"></div>
             <div class="hero-stat">
                 <span class="hero-stat-val">ConvNeXt</span>
                 <span class="hero-stat-lbl">Modelo · ONNX CPU</span>
@@ -1520,8 +1761,9 @@ with tab_classify:
         st.markdown(
             '<div class="empty-state">'
             '<div class="empty-state-icon">🌿</div>'
-            '<div class="empty-state-text">Carga una fotografía o usa la cámara para identificar '
-            'una especie arbórea del campus.</div>'
+            '<div class="empty-state-title">Sube una foto para comenzar</div>'
+            '<div class="empty-state-text">El modelo de IA identificará la especie arbórea '
+            'del campus en segundos.</div>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -1645,24 +1887,22 @@ with tab_map:
             lat = float(location["latitude"])
             lon = float(location["longitude"])
             acc = location.get("accuracy")
-            acc_str = f" · ±{acc:.0f} m" if acc is not None else ""
+            acc_str = f"±{acc:.0f} m precisión" if acc is not None else ""
             st.markdown(
-                f'<div style="background:var(--cream);border:1.5px solid var(--mint);'
-                f'border-radius:var(--r-md);padding:.8rem 1rem;margin-bottom:.75rem">'
-                f'<div style="font-size:.68rem;font-weight:700;text-transform:uppercase;'
-                f'letter-spacing:.1em;color:var(--sage);margin-bottom:.3rem">📍 Ubicación GPS</div>'
-                f'<div style="font-size:.92rem;color:var(--forest);font-weight:600">'
-                f'{lat:.6f}, {lon:.6f}</div>'
-                f'<div style="font-size:.78rem;color:var(--muted)">{acc_str}</div>'
+                f'<div class="location-card">'
+                f'<div class="location-card-title">📍 Ubicación GPS activa</div>'
+                f'<div class="location-card-coords">{lat:.6f}, {lon:.6f}</div>'
+                f'<div class="location-card-meta">{acc_str}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                '<div class="empty-state" style="padding:1.5rem 1rem">'
-                '<div class="empty-state-icon" style="font-size:2rem">📍</div>'
-                '<div class="empty-state-text" style="font-size:.85rem">'
-                'Pulsa <strong>Get Location</strong> para activar el GPS.</div>'
+                '<div class="empty-state" style="padding:2rem 1rem">'
+                '<div class="empty-state-icon" style="font-size:2.2rem">📍</div>'
+                '<div class="empty-state-title" style="font-size:.95rem">GPS no activo</div>'
+                '<div class="empty-state-text" style="font-size:.82rem">'
+                'Pulsa <strong>Get Location</strong> para activar.</div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -1671,12 +1911,9 @@ with tab_map:
         click_pt = st.session_state.get("map_click_point")
         if click_pt:
             st.markdown(
-                f'<div style="background:var(--cream);border:1.5px solid var(--terra-lt);'
-                f'border-radius:var(--r-md);padding:.8rem 1rem;margin-bottom:.75rem">'
-                f'<div style="font-size:.68rem;font-weight:700;text-transform:uppercase;'
-                f'letter-spacing:.1em;color:var(--terra);margin-bottom:.3rem">🖱 Punto seleccionado</div>'
-                f'<div style="font-size:.92rem;color:var(--forest);font-weight:600">'
-                f'{click_pt[0]:.6f}, {click_pt[1]:.6f}</div>'
+                f'<div class="location-card" style="border-color:rgba(192,83,58,.25)">'
+                f'<div class="location-card-title" style="color:var(--terra)">🖱 Punto seleccionado</div>'
+                f'<div class="location-card-coords">{click_pt[0]:.6f}, {click_pt[1]:.6f}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -1750,9 +1987,9 @@ with tab_map:
         if saved_pts:
             st.markdown("---")
             st.markdown(
-                f'<div style="font-size:.75rem;font-weight:700;text-transform:uppercase;'
-                f'letter-spacing:.1em;color:var(--sage-lt);margin-bottom:.5rem">'
-                f'Árboles guardados ({len(saved_pts)})</div>',
+                f'<div style="font-family:Outfit,sans-serif;font-size:.7rem;font-weight:700;'
+                f'text-transform:uppercase;letter-spacing:.12em;color:var(--f-400);'
+                f'margin-bottom:.6rem">🌳 Árboles guardados ({len(saved_pts)})</div>',
                 unsafe_allow_html=True,
             )
             for i, pt in enumerate(saved_pts):

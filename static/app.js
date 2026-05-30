@@ -1,0 +1,646 @@
+/* app.js — Campus Tree Explorer PWA frontend */
+
+// =============================================================================
+// State
+// =============================================================================
+
+const state = {
+  section: "home",
+  detectedSpecies: null,   // { key, name, prob, info }
+  mapPoints: [],
+  gpsCoords: null,
+  clickCoords: null,
+  leafletMap: null,
+  miniMap: null,
+  triviaScore: 0,
+  triviaTotal: 0,
+  triviaAnswer: null,
+  triviaKey: null,
+  mapStyle: "satellite",
+  classes: [],
+  installPrompt: null,
+};
+
+// =============================================================================
+// Navigation
+// =============================================================================
+
+function navigate(id, pushHistory = true) {
+  state.section = id;
+
+  // Hero
+  const hero = document.getElementById("hero");
+  const feats = document.getElementById("feature-cards");
+  const isHome = id === "home";
+  hero.style.display  = isHome ? "" : "none";
+  feats.style.display = isHome ? "" : "none";
+
+  // Sections
+  document.querySelectorAll(".section").forEach(s => {
+    s.classList.toggle("active", s.id === `sec-${id}`);
+  });
+
+  // Nav links
+  document.querySelectorAll(".nav-link").forEach(l => {
+    l.classList.toggle("active", l.dataset.nav === id);
+  });
+
+  if (pushHistory) history.pushState({ section: id }, "", id === "home" ? "/" : `#${id}`);
+
+  // Lazy init
+  if (id === "map")     initMap();
+  if (id === "trivia")  initTrivia();
+  if (id === "catalog") initCatalog();
+}
+
+window.addEventListener("popstate", e => {
+  navigate(e.state?.section || "home", false);
+});
+
+// =============================================================================
+// Toast
+// =============================================================================
+
+function toast(msg, type = "success", ms = 3500) {
+  const c = document.getElementById("toast-container");
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+// =============================================================================
+// IDENTIFY section
+// =============================================================================
+
+let dropTarget;
+
+function initIdentify() {
+  const zone  = document.getElementById("upload-zone");
+  const input = document.getElementById("file-input");
+  const camBtn = document.getElementById("camera-btn");
+  const camIn  = document.getElementById("camera-input");
+
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+  zone.addEventListener("drop", e => {
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    const f = e.dataTransfer.files[0];
+    if (f) runPredict(f);
+  });
+
+  input.addEventListener("change", () => { if (input.files[0]) runPredict(input.files[0]); });
+  camBtn.addEventListener("click", () => camIn.click());
+  camIn.addEventListener("change", () => { if (camIn.files[0]) runPredict(camIn.files[0]); });
+}
+
+async function runPredict(file) {
+  const resultBox = document.getElementById("identify-result");
+  resultBox.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div><p style="color:var(--neutral-500);font-size:.9rem">Analizando imagen…</p></div>`;
+  resultBox.style.display = "block";
+  document.getElementById("upload-zone").style.display = "none";
+
+  // Preview
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById("preview-img").src = e.target.result;
+    document.getElementById("preview-wrap").style.display = "flex";
+    document.getElementById("identify-grid").style.display = "grid";
+  };
+  reader.readAsDataURL(file);
+
+  const fd = new FormData();
+  fd.append("file", file);
+
+  try {
+    const resp = await fetch("/api/predict", { method: "POST", body: fd });
+    if (!resp.ok) throw new Error(await resp.text());
+    const { results } = await resp.json();
+
+    state.detectedSpecies = results[0];
+    renderPredictions(results, resultBox);
+    renderSpeciesInfo(results[0].key, document.getElementById("species-info-box"));
+    document.getElementById("species-info-box").style.display = "block";
+
+    // Update trivia / map detected badge
+    document.querySelectorAll(".detected-name").forEach(el => {
+      el.textContent = results[0].info?.nombre_comun || results[0].name;
+    });
+    document.querySelectorAll(".detected-badge-wrap").forEach(el => el.style.display = "flex");
+  } catch (err) {
+    resultBox.innerHTML = `<div class="alert alert-warn">⚠️ Error al analizar: ${err.message}</div>`;
+  }
+}
+
+function renderPredictions(results, container) {
+  const top  = results[0];
+  const conf = top.prob;
+  const sci  = top.info?.nombre_cientifico || "";
+  const confCls = conf >= .75 ? "pill-green" : conf >= .50 ? "pill-amber" : "pill-red";
+  const confLbl = conf >= .75 ? "Alta" : conf >= .50 ? "Moderada" : "Baja";
+
+  let altHtml = "";
+  if (results.length > 1) {
+    const medals = ["🥈", "🥉"];
+    altHtml = `<div class="alts-label">Otras posibilidades</div>` +
+      results.slice(1).map((r, i) => `
+        <div class="alt-row" onclick="loadSpeciesDetail('${r.key}')">
+          <span class="alt-medal">${medals[i] || `#${i+2}`}</span>
+          <span class="alt-name">${esc(r.name)}</span>
+          <span class="alt-pct">${(r.prob*100).toFixed(1)}%</span>
+        </div>`).join("");
+  }
+
+  const warnHtml = conf < .50
+    ? `<div class="alert alert-warn">⚠️ Confianza baja — intenta con foto más nítida mostrando hojas, flores o frutos.</div>`
+    : conf < .75
+    ? `<div class="alert alert-tip">💡 Confianza moderada — verifica rasgos botánicos antes de concluir.</div>`
+    : "";
+
+  container.innerHTML = `
+    <div class="pred-card">
+      <div class="pred-label">🌿 Especie más probable</div>
+      <div class="pred-name">${esc(top.name)}</div>
+      ${sci ? `<div class="pred-sci">${esc(sci)}</div>` : ""}
+      <div class="conf-bar-wrap"><div class="conf-bar" style="width:${(conf*100).toFixed(1)}%"></div></div>
+      <div class="conf-row">
+        <span class="conf-pill ${confCls}">${confLbl} ${(conf*100).toFixed(0)}%</span>
+        <span class="conf-text">Confianza: <strong>${(conf*100).toFixed(1)}%</strong></span>
+      </div>
+    </div>
+    ${warnHtml}
+    ${altHtml}
+  `;
+}
+
+function resetIdentify() {
+  document.getElementById("upload-zone").style.display = "";
+  document.getElementById("identify-result").style.display = "none";
+  document.getElementById("species-info-box").style.display = "none";
+  document.getElementById("identify-grid").style.display = "none";
+  document.getElementById("preview-wrap").style.display = "none";
+}
+
+// =============================================================================
+// CATALOG section
+// =============================================================================
+
+async function initCatalog() {
+  if (state.classes.length) { renderCatalogGrid(state.classes); return; }
+  const res = await fetch("/api/classes");
+  const { classes } = await res.json();
+  state.classes = classes;
+  renderCatalogGrid(classes);
+
+  document.getElementById("catalog-search").addEventListener("input", e => {
+    const q = e.target.value.toLowerCase();
+    renderCatalogGrid(classes.filter(c =>
+      c.name.toLowerCase().includes(q) || c.scientific.toLowerCase().includes(q)
+    ));
+  });
+}
+
+function renderCatalogGrid(items) {
+  const grid = document.getElementById("catalog-grid");
+  if (!items.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">Sin resultados</div>
+      <div class="empty-sub">Prueba con otro nombre o nombre científico.</div>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = items.map(c => `
+    <div class="species-card" onclick="loadSpeciesDetail('${c.key}')">
+      <div class="species-card-icon">🌿</div>
+      <div class="species-card-name">${esc(c.name)}</div>
+      ${c.scientific ? `<div class="species-card-sci">${esc(c.scientific)}</div>` : ""}
+      ${c.family ? `<div class="species-card-fam">${esc(c.family)}</div>` : ""}
+    </div>`).join("");
+}
+
+async function loadSpeciesDetail(key) {
+  document.getElementById("catalog-list-view").style.display = "none";
+  const detail = document.getElementById("catalog-detail-view");
+  detail.style.display = "block";
+  detail.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div></div>`;
+
+  try {
+    const res = await fetch(`/api/catalog/${key}`);
+    const info = await res.json();
+    renderSpeciesInfo(key, detail, info);
+  } catch {
+    detail.innerHTML = `<div class="alert alert-warn">Error cargando información.</div>`;
+  }
+}
+
+function showCatalogList() {
+  document.getElementById("catalog-list-view").style.display = "";
+  document.getElementById("catalog-detail-view").style.display = "none";
+}
+
+function renderSpeciesInfo(key, container, infoData = null) {
+  const info = infoData || state.detectedSpecies?.info || {};
+  const name = info.nombre_comun || info.display_name || key?.replace(/_/g, " ");
+  const sci  = info.nombre_cientifico || "";
+
+  const pills = [
+    info.familia ? `<span class="pill-tag">🏷 Familia: <strong>${esc(info.familia)}</strong></span>` : "",
+    info.altura_aproximada ? `<span class="pill-tag">📏 Altura: <strong>${esc(info.altura_aproximada)}</strong></span>` : "",
+  ].filter(Boolean).join("");
+
+  const row = (icon, label, val) => val
+    ? `<div><div class="sec-label">${icon} ${label}</div><div class="info-text">${esc(val)}</div></div>`
+    : "";
+
+  const backBtn = infoData
+    ? `<button class="back-btn" onclick="showCatalogList()">← Volver al catálogo</button>`
+    : "";
+
+  container.innerHTML = `
+    ${backBtn}
+    <div class="info-card">
+      <div class="info-title">🌿 ${esc(name)}</div>
+      ${sci ? `<div class="info-sci">${esc(sci)}</div>` : ""}
+      ${pills ? `<div class="pills">${pills}</div>` : ""}
+      ${row("📖","Descripción", info.descripcion)}
+      ${row("🔎","Cómo identificarlo", info.como_identificarlo)}
+      <div class="grid-2">
+        ${row("🍃","Hojas", info.hojas)}
+        ${row("🌸","Flores", info.flores)}
+      </div>
+      <div class="grid-2">
+        ${row("🍑","Frutos", info.frutos)}
+        ${row("🌍","Distribución", info.distribucion)}
+      </div>
+      ${row("🛠","Usos", info.usos)}
+      ${info.dato_curioso ? `<div class="fact-card">💡 <strong>Dato curioso:</strong> ${esc(info.dato_curioso)}</div>` : ""}
+      <div class="historia-card">
+        <div class="historia-label">🌎 Origen, historia en Colombia y usos</div>
+        <div class="historia-text">${info.historia_origen_colombia_usos
+          ? esc(info.historia_origen_colombia_usos)
+          : '<em style="color:var(--neutral-400)">Información no disponible para esta especie.</em>'
+        }</div>
+      </div>
+    </div>`;
+}
+
+// =============================================================================
+// MAP section
+// =============================================================================
+
+function initMap() {
+  if (state.leafletMap) return;
+  const center = window.CAMPUS_CENTER || [6.2636427, -75.5764393];
+
+  const satUrl  = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  const satAttr = "Tiles © Esri";
+  const satLayer   = L.tileLayer(satUrl, { attribution: satAttr, maxZoom: 20 });
+  const streetLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution: "© CartoDB", maxZoom: 20
+  });
+
+  const map = L.map("campus-map", { center, zoom: 18, layers: [satLayer] });
+  state.leafletMap = map;
+  state.mapLayers  = { satellite: satLayer, streets: streetLayer };
+
+  // Markers layer group
+  state.markersLayer = L.layerGroup().addTo(map);
+  state.gpsMarker    = null;
+  state.clickMarker  = null;
+
+  // Click handler
+  map.on("click", e => {
+    state.clickCoords = [e.latlng.lat, e.latlng.lng];
+    if (state.clickMarker) state.clickMarker.remove();
+    state.clickMarker = L.marker([e.latlng.lat, e.latlng.lng], {
+      icon: L.divIcon({ className: "", html: `<div style="background:#D97706;width:14px;height:14px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>`, iconSize: [14,14], iconAnchor: [7,7] })
+    }).addTo(map).bindPopup(`Punto seleccionado<br>${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`);
+    updateClickDisplay();
+  });
+
+  // Load persisted points
+  loadMapPoints();
+  refreshMapMarkers();
+
+  // Style toggle
+  document.getElementById("btn-satellite").addEventListener("click", () => setMapStyle("satellite"));
+  document.getElementById("btn-streets").addEventListener("click",   () => setMapStyle("streets"));
+
+  // GPS
+  document.getElementById("btn-gps").addEventListener("click", requestGPS);
+
+  // Save
+  document.getElementById("btn-save-tree").addEventListener("click", saveTree);
+  document.getElementById("btn-sync").addEventListener("click", syncGithub);
+}
+
+function setMapStyle(style) {
+  if (!state.leafletMap) return;
+  state.mapStyle = style;
+  const map = state.leafletMap;
+  const { satellite, streets } = state.mapLayers;
+  if (style === "satellite") { map.removeLayer(streets); map.addLayer(satellite); }
+  else { map.removeLayer(satellite); map.addLayer(streets); }
+  document.getElementById("btn-satellite").classList.toggle("active", style === "satellite");
+  document.getElementById("btn-streets").classList.toggle("active",   style === "streets");
+}
+
+function requestGPS() {
+  if (!navigator.geolocation) { toast("GPS no disponible en este dispositivo.", "error"); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      state.gpsCoords = [pos.coords.latitude, pos.coords.longitude];
+      const acc = pos.coords.accuracy;
+      if (state.gpsMarker) state.gpsMarker.remove();
+      state.gpsMarker = L.circleMarker(state.gpsCoords, {
+        radius: 10, color: "#1976D2", fillColor: "#42A5F5", fillOpacity: .75,
+        weight: 2
+      }).addTo(state.leafletMap).bindPopup("Tu ubicación GPS");
+      state.leafletMap.setView(state.gpsCoords, 19);
+      document.getElementById("gps-display").textContent =
+        `${state.gpsCoords[0].toFixed(6)}, ${state.gpsCoords[1].toFixed(6)} · ±${acc.toFixed(0)} m`;
+      document.getElementById("gps-display-wrap").style.display = "";
+    },
+    err => toast(`Error GPS: ${err.message}`, "error")
+  );
+}
+
+function updateClickDisplay() {
+  if (!state.clickCoords) return;
+  document.getElementById("click-display").textContent =
+    `${state.clickCoords[0].toFixed(6)}, ${state.clickCoords[1].toFixed(6)}`;
+  document.getElementById("click-display-wrap").style.display = "";
+}
+
+function refreshMapMarkers() {
+  if (!state.markersLayer) return;
+  state.markersLayer.clearLayers();
+  state.mapPoints.forEach(pt => {
+    const popup = `<b>${pt.name}</b><br><em>${pt.sci||""}</em><br>
+      Confianza: ${pt.confidence ? (pt.confidence*100).toFixed(0)+"%" : "—"}<br>
+      ${pt.datetime || ""}`;
+    L.marker([pt.lat, pt.lon], {
+      icon: L.divIcon({
+        className: "",
+        html: `<div style="background:var(--forest-600,#1B4332);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);border:2px solid #fff">🌳</div>`,
+        iconSize: [28,28], iconAnchor: [14,14]
+      })
+    }).addTo(state.markersLayer).bindPopup(popup).bindTooltip(pt.name);
+  });
+}
+
+async function saveTree() {
+  if (!state.detectedSpecies) { toast("Identifica una especie primero en la sección Identificar.", "error"); return; }
+  const coords = state.gpsCoords || state.clickCoords;
+  if (!coords) { toast("Activa el GPS o haz clic en el mapa para fijar ubicación.", "error"); return; }
+
+  const source = state.gpsCoords ? "gps" : "manual_map_click";
+  const body = {
+    species_key: state.detectedSpecies.key,
+    common_name: state.detectedSpecies.info?.nombre_comun || state.detectedSpecies.name,
+    confidence:  state.detectedSpecies.prob,
+    latitude:    coords[0],
+    longitude:   coords[1],
+    source,
+  };
+
+  try {
+    const res = await fetch("/api/save-tree", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    state.mapPoints.push({ ...body, name: body.common_name, lat: coords[0], lon: coords[1] });
+    refreshMapMarkers();
+    renderSavedList();
+    toast(`✅ ${body.common_name} guardado en el mapa.`);
+  } catch (err) {
+    toast(`Error al guardar: ${err.message}`, "error");
+  }
+}
+
+async function syncGithub() {
+  toast("Sincronizando con GitHub…");
+  try {
+    const res = await fetch("/api/sync-github", { method: "POST" });
+    const { ok, message } = await res.json();
+    toast(message, ok ? "success" : "error");
+  } catch {
+    toast("Error de red.", "error");
+  }
+}
+
+function loadMapPoints() {
+  fetch("/api/map-data").then(r => r.json()).then(({ points }) => {
+    state.mapPoints = points;
+    refreshMapMarkers();
+    renderSavedList();
+  });
+}
+
+function renderSavedList() {
+  const list = document.getElementById("saved-list");
+  if (!state.mapPoints.length) {
+    list.innerHTML = `<div style="font-size:.8rem;color:var(--neutral-400);text-align:center;padding:.5rem">Sin árboles guardados aún.</div>`;
+    return;
+  }
+  list.innerHTML = state.mapPoints.map((pt, i) => `
+    <div class="saved-item">
+      <span class="saved-item-name">🌳 ${esc(pt.name)}</span>
+      <button class="saved-item-del" onclick="removeSavedPoint(${i})">✕</button>
+    </div>`).join("");
+}
+
+function removeSavedPoint(i) {
+  state.mapPoints.splice(i, 1);
+  refreshMapMarkers();
+  renderSavedList();
+}
+
+// =============================================================================
+// TRIVIA section
+// =============================================================================
+
+const TV = { score: 0, total: 0, max: 5, state: "ask", answer: null };
+
+async function initTrivia() {
+  if (state.classes.length) { populateTriviaSelect(); return; }
+  const res = await fetch("/api/classes");
+  const { classes } = await res.json();
+  state.classes = classes;
+  populateTriviaSelect();
+}
+
+function populateTriviaSelect() {
+  const sel = document.getElementById("trivia-species-select");
+  sel.innerHTML = state.classes.map(c =>
+    `<option value="${c.key}">${esc(c.name)}</option>`
+  ).join("");
+
+  // Pre-select detected species
+  if (state.detectedSpecies) sel.value = state.detectedSpecies.key;
+  startTriviaRound();
+}
+
+function startTriviaRound() {
+  TV.score = 0; TV.total = 0; TV.state = "ask"; TV.answer = null;
+  loadNextQuestion();
+}
+
+async function loadNextQuestion() {
+  const key = document.getElementById("trivia-species-select").value;
+  state.triviaKey = key;
+  document.getElementById("trivia-result-view").style.display = "none";
+  const card = document.getElementById("quiz-card");
+  card.style.display = "";
+  card.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div></div>`;
+
+  try {
+    const res = await fetch(`/api/trivia/${key}`);
+    if (!res.ok) throw new Error("Sin datos suficientes.");
+    const q = await res.json();
+    TV.answer = q.answer;
+    renderQuestion(q);
+  } catch (err) {
+    card.innerHTML = `<div class="alert alert-tip">${err.message}</div>`;
+  }
+}
+
+function renderQuestion(q) {
+  const card = document.getElementById("quiz-card");
+  const pct  = TV.max > 0 ? ((TV.total / TV.max) * 100).toFixed(0) : 0;
+
+  card.innerHTML = `
+    <div class="quiz-progress">
+      <span class="quiz-counter">Pregunta ${TV.total + 1} / ${TV.max}</span>
+      <span class="quiz-score-badge">🏆 ${TV.score} / ${TV.total}</span>
+    </div>
+    <div class="quiz-prog-bar"><div class="quiz-prog-fill" style="width:${pct}%"></div></div>
+    <div class="quiz-question">${esc(q.question)}</div>
+    <div class="quiz-options">
+      ${q.options.map(opt => `
+        <button class="quiz-option" onclick="checkAnswer('${esc(opt)}')">${esc(opt)}</button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function checkAnswer(chosen) {
+  TV.total += 1;
+  const correct = chosen === TV.answer;
+  if (correct) TV.score += 1;
+
+  // Freeze buttons + highlight
+  document.querySelectorAll(".quiz-option").forEach(btn => {
+    btn.disabled = true;
+    if (btn.textContent === TV.answer)  btn.classList.add("correct");
+    if (btn.textContent === chosen && !correct) btn.classList.add("wrong");
+  });
+
+  // Add feedback + next button
+  const card = document.getElementById("quiz-card");
+  const fb   = document.createElement("div");
+  fb.style.marginTop = "1rem";
+  const isLast = TV.total >= TV.max;
+  fb.innerHTML = `
+    <div class="alert ${correct ? "alert-ok" : "alert-warn"}" style="margin-bottom:.8rem">
+      ${correct ? "✅ ¡Correcto!" : `❌ La respuesta era: <strong>${esc(TV.answer)}</strong>`}
+    </div>
+    <button class="btn-primary" style="width:100%;justify-content:center" onclick="${isLast ? "showTriviaResult()" : "loadNextQuestion()"}">
+      ${isLast ? "Ver resultados 🏆" : "Siguiente →"}
+    </button>`;
+  card.appendChild(fb);
+}
+
+function showTriviaResult() {
+  document.getElementById("quiz-card").style.display = "none";
+  const rv = document.getElementById("trivia-result-view");
+  rv.style.display = "";
+  const pct = TV.total > 0 ? Math.round((TV.score / TV.total) * 100) : 0;
+  const emoji = pct >= 80 ? "🏆" : pct >= 50 ? "🌿" : "🌱";
+  rv.innerHTML = `
+    <div class="quiz-result-card">
+      <div class="quiz-result-emoji">${emoji}</div>
+      <div class="quiz-result-title">¡Ronda completada!</div>
+      <div class="quiz-result-score">${TV.score} / ${TV.total}</div>
+      <div class="quiz-result-sub">${pct}% de respuestas correctas</div>
+      <button class="btn-restart" onclick="startTriviaRound()">Jugar de nuevo</button>
+    </div>`;
+}
+
+// =============================================================================
+// Mini hero map
+// =============================================================================
+
+function initMiniMap() {
+  const center = window.CAMPUS_CENTER || [6.2636427, -75.5764393];
+  const m = L.map("hero-mini-map", { center, zoom: 17, zoomControl: false,
+    scrollWheelZoom: false, dragging: false, touchZoom: false });
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution: ""
+  }).addTo(m);
+  state.miniMap = m;
+}
+
+// =============================================================================
+// PWA install
+// =============================================================================
+
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  state.installPrompt = e;
+  document.getElementById("install-banner").style.display = "flex";
+});
+
+function installApp() {
+  if (!state.installPrompt) return;
+  state.installPrompt.prompt();
+  state.installPrompt.userChoice.then(() => {
+    state.installPrompt = null;
+    document.getElementById("install-banner").style.display = "none";
+  });
+}
+
+function dismissInstall() {
+  document.getElementById("install-banner").style.display = "none";
+}
+
+// =============================================================================
+// Utility
+// =============================================================================
+
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// =============================================================================
+// Boot
+// =============================================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Nav links
+  document.querySelectorAll(".nav-link").forEach(l => {
+    l.addEventListener("click", () => navigate(l.dataset.nav));
+  });
+  document.getElementById("nav-cta").addEventListener("click", () => navigate("identify"));
+  document.querySelectorAll("[data-nav-to]").forEach(el => {
+    el.addEventListener("click", () => navigate(el.dataset.navTo));
+  });
+
+  // Init identify
+  initIdentify();
+  document.getElementById("identify-reset").addEventListener("click", resetIdentify);
+
+  // Init mini map on hero
+  if (document.getElementById("hero-mini-map")) initMiniMap();
+
+  // Service worker
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/static/sw.js").catch(() => {});
+  }
+});

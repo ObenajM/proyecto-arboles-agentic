@@ -6,7 +6,11 @@
 
 const state = {
   section: "home",
-  detectedSpecies: null,   // { key, name, prob, info }
+  detectedSpecies: null,   // especie final seleccionada para UI/mapa
+  modelTopSpecies: null,    // top-1 original del modelo local
+  agentDecision: null,
+  plantnetResult: null,
+  comparison: null,
   mapPoints: [],
   gpsCoords: null,
   clickCoords: null,
@@ -117,16 +121,28 @@ async function runPredict(file) {
   try {
     const resp = await fetch("/api/predict", { method: "POST", body: fd });
     if (!resp.ok) throw new Error(await resp.text());
-    const { results } = await resp.json();
+    const payload = await resp.json();
+    const { results, agent_decision, plantnet, comparison, agent_error } = payload;
 
-    state.detectedSpecies = results[0];
-    renderPredictions(results, resultBox);
-    renderSpeciesInfo(results[0].key, document.getElementById("species-info-box"));
+    if (!results || !results.length) throw new Error("No se obtuvieron predicciones.");
+
+    state.modelTopSpecies = results[0];
+    state.agentDecision = agent_decision || null;
+    state.plantnetResult = plantnet || null;
+    state.comparison = comparison || null;
+
+    const selectedKey = getSelectedSpeciesKey(results, agent_decision);
+    const selectedResult = results.find(r => r.key === selectedKey) || results[0];
+    state.detectedSpecies = selectedResult;
+
+    renderPredictions(results, resultBox, agent_decision, plantnet, comparison, agent_error);
+    renderSpeciesInfo(selectedResult.key, document.getElementById("species-info-box"), selectedResult.info || null);
     document.getElementById("species-info-box").style.display = "block";
 
     // Update trivia / map detected badge
+    const badgeName = getFinalSpeciesName();
     document.querySelectorAll(".detected-name").forEach(el => {
-      el.textContent = results[0].info?.nombre_comun || results[0].name;
+      el.textContent = badgeName;
     });
     document.querySelectorAll(".detected-badge-wrap").forEach(el => el.style.display = "flex");
   } catch (err) {
@@ -134,7 +150,7 @@ async function runPredict(file) {
   }
 }
 
-function renderPredictions(results, container) {
+function renderPredictions(results, container, agentDecision = null, plantnet = null, comparison = null, agentError = null) {
   const top  = results[0];
   const conf = top.prob;
   const sci  = top.info?.nombre_cientifico || "";
@@ -161,7 +177,7 @@ function renderPredictions(results, container) {
 
   container.innerHTML = `
     <div class="pred-card">
-      <div class="pred-label">🌿 Especie más probable</div>
+      <div class="pred-label">🌿 Especie más probable del modelo</div>
       <div class="pred-name">${esc(top.name)}</div>
       ${sci ? `<div class="pred-sci">${esc(sci)}</div>` : ""}
       <div class="conf-bar-wrap"><div class="conf-bar" style="width:${(conf*100).toFixed(1)}%"></div></div>
@@ -171,8 +187,51 @@ function renderPredictions(results, container) {
       </div>
     </div>
     ${warnHtml}
+    ${renderAgentDecision(agentDecision, plantnet, comparison, agentError)}
     ${altHtml}
   `;
+}
+
+function renderAgentDecision(decision, plantnet, comparison, agentError) {
+  if (agentError) {
+    return `<div class="alert alert-tip">🤖 Agente no disponible. Se muestra solo la predicción local. <br><small>${esc(agentError)}</small></div>`;
+  }
+  if (!decision) return "";
+
+  const decisionMap = {
+    aceptar_prediccion: ["✅", "Predicción aceptada", "alert-ok"],
+    mostrar_alternativas: ["⚠️", "Revisar alternativas", "alert-tip"],
+    pedir_nueva_foto: ["📷", "Nueva foto recomendada", "alert-warn"],
+    revision_manual: ["🔬", "Revisión manual recomendada", "alert-warn"],
+    imagen_incorrecta: ["🚫", "Imagen no válida", "alert-warn"],
+  };
+  const [icon, title, cls] = decisionMap[decision.decision] || ["🤖", "Decisión del agente", "alert-tip"];
+  const plantnetName = decision.plantnet_prediction_common || decision.plantnet_prediction_scientific || "No disponible";
+  const plantnetScore = Number(decision.plantnet_score || 0);
+  const modelScore = Number(decision.model_confidence || 0);
+  const selected = decision.species_selected || decision.model_prediction_common || "—";
+
+  const plantnetBlock = decision.web_evidence_used
+    ? `<div style="margin-top:.65rem;font-size:.84rem;line-height:1.55">
+         <strong>Pl@ntNet:</strong> ${esc(plantnetName)} ${plantnetScore ? `· score ${(plantnetScore*100).toFixed(1)}%` : ""}
+       </div>`
+    : `<div style="margin-top:.65rem;font-size:.84rem;line-height:1.55">
+         <strong>Pl@ntNet:</strong> no disponible. ${plantnet?.razon ? esc(plantnet.razon) : ""}
+       </div>`;
+
+  return `
+    <div class="alert ${cls}">
+      <div style="font-weight:800;margin-bottom:.35rem">${icon} ${title}</div>
+      <div style="font-size:.9rem;line-height:1.6">
+        <strong>Especie final sugerida:</strong> ${esc(selected)}
+      </div>
+      <div style="margin-top:.45rem;font-size:.84rem;line-height:1.55">
+        <strong>Modelo:</strong> ${esc(decision.model_prediction_common || "—")} · confianza ${(modelScore*100).toFixed(1)}%
+      </div>
+      ${plantnetBlock}
+      ${decision.reasoning ? `<div style="margin-top:.65rem;font-size:.86rem;line-height:1.6"><strong>Razón:</strong> ${esc(decision.reasoning)}</div>` : ""}
+      ${decision.recommended_action ? `<div style="margin-top:.4rem;font-size:.86rem;line-height:1.6"><strong>Acción:</strong> ${esc(decision.recommended_action)}</div>` : ""}
+    </div>`;
 }
 
 function resetIdentify() {
@@ -399,9 +458,9 @@ async function saveTree() {
 
   const source = state.gpsCoords ? "gps" : "manual_map_click";
   const body = {
-    species_key: state.detectedSpecies.key,
-    common_name: state.detectedSpecies.info?.nombre_comun || state.detectedSpecies.name,
-    confidence:  state.detectedSpecies.prob,
+    species_key: getSelectedSpeciesKey([state.detectedSpecies], state.agentDecision) || state.detectedSpecies.key,
+    common_name: getFinalSpeciesName(),
+    confidence:  state.modelTopSpecies?.prob ?? state.detectedSpecies.prob,
     latitude:    coords[0],
     longitude:   coords[1],
     source,
@@ -522,9 +581,10 @@ function renderQuestion(q) {
     <div class="quiz-prog-bar"><div class="quiz-prog-fill" style="width:${pct}%"></div></div>
     <div class="quiz-question">${esc(q.question)}</div>
     <div class="quiz-options">
-      ${q.options.map(opt => `
-        <button class="quiz-option" onclick="checkAnswer('${esc(opt)}')">${esc(opt)}</button>
-      `).join("")}
+      ${q.options.map(opt => {
+        const arg = JSON.stringify(String(opt)).replace(/"/g, "&quot;");
+        return `<button class="quiz-option" onclick="checkAnswer(${arg})">${esc(opt)}</button>`;
+      }).join("")}
     </div>
   `;
 }
@@ -607,6 +667,24 @@ function installApp() {
 
 function dismissInstall() {
   document.getElementById("install-banner").style.display = "none";
+}
+
+// =============================================================================
+// Agent helpers
+// =============================================================================
+
+function getSelectedSpeciesKey(results = [], decision = null) {
+  const key = decision?.species_selected_key;
+  if (key && results.some(r => r.key === key)) return key;
+  return results[0]?.key || state.detectedSpecies?.key || null;
+}
+
+function getFinalSpeciesName() {
+  const d = state.agentDecision;
+  if (d && d.species_selected && d.species_selected !== "ninguna") {
+    return d.species_selected;
+  }
+  return state.detectedSpecies?.info?.nombre_comun || state.detectedSpecies?.name || "Especie detectada";
 }
 
 // =============================================================================

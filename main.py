@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from io import BytesIO
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +26,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image, ImageOps
 from pydantic import BaseModel
+
+try:
+    from agent_validation import ejecutar_agente
+except Exception as exc:  # El backend puede seguir funcionando solo con ONNX
+    ejecutar_agente = None
+    AGENT_IMPORT_ERROR = str(exc)
+else:
+    AGENT_IMPORT_ERROR = None
 
 # =============================================================================
 # Paths & constants  (mismo layout que el proyecto original)
@@ -278,10 +287,63 @@ async def root(request: Request):
 async def predict(file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="El archivo debe ser una imagen.")
-    data  = await file.read()
+
+    data = await file.read()
     image = Image.open(BytesIO(data)).convert("RGB")
+
+    # 1) Predicción local ONNX: rápida y siempre disponible.
     results = run_inference(image, top_k=min(TOP_K, len(class_names)))
-    return {"results": results}
+
+    agent_decision: dict | None = None
+    plantnet_result: dict | None = None
+    comparison: dict | None = None
+    agent_error: str | None = None
+
+    # 2) Validación agente: ONNX top-k + Pl@ntNet + reglas de decisión.
+    #    Si falla, la API conserva la predicción local y reporta el error.
+    if ejecutar_agente is None:
+        agent_error = AGENT_IMPORT_ERROR or "agent_validation.py no disponible"
+    elif results:
+        top = results[0]
+        top_k_list = [(r["key"], float(r["prob"])) for r in results]
+
+        suffix = Path(file.filename or "imagen.jpg").suffix.lower()
+        if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
+            suffix = ".jpg"
+
+        tmp_path: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
+
+            estado_final = ejecutar_agente(
+                especie_pred=top["key"],
+                confianza=float(top["prob"]),
+                top_k_list=top_k_list,
+                info_especie=get_info(top["key"]),
+                ruta_imagen=tmp_path,
+                info_global=species_info,
+            )
+            agent_decision = estado_final.get("decision_final", {})
+            plantnet_result = estado_final.get("plantnet_resultado", {})
+            comparison = estado_final.get("comparacion", {})
+        except Exception as exc:
+            agent_error = str(exc)
+        finally:
+            if tmp_path:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+    return {
+        "results": results,
+        "agent_decision": agent_decision,
+        "plantnet": plantnet_result,
+        "comparison": comparison,
+        "agent_error": agent_error,
+    }
 
 
 @app.get("/api/classes")

@@ -264,11 +264,14 @@ def build_question(species_key: str) -> dict | None:
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request":       request,
-        "species_count": len(class_names),
-        "campus_center": json.dumps(CAMPUS_CENTER),
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "species_count": len(class_names),
+            "campus_center": json.dumps(CAMPUS_CENTER),
+        }
+    )
 
 
 @app.post("/api/predict")

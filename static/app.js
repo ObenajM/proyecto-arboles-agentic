@@ -829,8 +829,8 @@ function initMiniMap() {
   const center = window.CAMPUS_CENTER || [6.2636427, -75.5764393];
   const m = L.map("hero-mini-map", { center, zoom: 17, zoomControl: false,
     scrollWheelZoom: false, dragging: false, touchZoom: false });
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: ""
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles © Esri", maxZoom: 20
   }).addTo(m);
   state.miniMap = m;
 }

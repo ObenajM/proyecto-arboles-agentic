@@ -3,10 +3,10 @@ agent_validation.py — Agente de validación para Campus Tree Explorer
 
 Este módulo NO carga el modelo local. El modelo ONNX vive en main.py.
 Aquí solo está la capa agente:
-Imagen + resultado ONNX → Pl@ntNet → comparación → decisión final.
+Imagen + resultado ONNX → agente validador → comparación → decisión final.
 
 Variables opcionales:
-- PLANTNET_KEY: activa validación visual con Pl@ntNet.
+- PLANTNET_KEY: activa validación visual con agente validador.
 - ANTHROPIC_API_KEY u OPENAI_API_KEY: mejora la redacción de la explicación.
 
 Si LangGraph no está instalado, el flujo se ejecuta en secuencia normal.
@@ -152,11 +152,11 @@ def _get_info(info_global: dict, key: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Pl@ntNet
+# agente validador
 # ─────────────────────────────────────────────────────────────────────────────
 
 def consultar_plantnet(ruta_imagen: str) -> dict:
-    """Consulta Pl@ntNet con la imagen y devuelve los 5 mejores resultados."""
+    """Consulta agente validador con la imagen y devuelve los 5 mejores resultados."""
     plantnet_key = os.environ.get("PLANTNET_KEY", "").strip()
     if not plantnet_key:
         return {
@@ -186,14 +186,14 @@ def consultar_plantnet(ruta_imagen: str) -> dict:
             return {
                 "es_planta": False,
                 "resultados": [],
-                "razon": "Pl@ntNet no reconoció ninguna planta",
+                "razon": "agente validador no reconoció ninguna planta",
             }
 
         if resp.status_code != 200:
             return {
                 "es_planta": None,
                 "resultados": [],
-                "razon": f"Pl@ntNet no disponible HTTP {resp.status_code}",
+                "razon": f"agente validador no disponible HTTP {resp.status_code}",
             }
 
         datos = resp.json()
@@ -212,7 +212,7 @@ def consultar_plantnet(ruta_imagen: str) -> dict:
             return {
                 "es_planta": None,
                 "resultados": [],
-                "razon": "Pl@ntNet respondió sin resultados",
+                "razon": "agente validador respondió sin resultados",
             }
 
         top = resultados[0]
@@ -224,22 +224,22 @@ def consultar_plantnet(ruta_imagen: str) -> dict:
             "top_nombre": nombre_mostrar,
             "top_score": top["score"],
             "razon": (
-                f"Pl@ntNet identificó '{nombre_mostrar}' "
+                f"agente validador identificó '{nombre_mostrar}' "
                 f"({top['nombre_cientifico']}) score {top['score']:.2f}"
             ),
         }
     except Exception as exc:
-        return {"es_planta": None, "resultados": [], "razon": f"Pl@ntNet error: {exc}"}
+        return {"es_planta": None, "resultados": [], "razon": f"agente validador error: {exc}"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Comparación modelo vs Pl@ntNet
+# Comparación modelo vs agente validador
 # ─────────────────────────────────────────────────────────────────────────────
 
 def buscar_coincidencia_nombre_comun(top_k_list: list, plantnet_resultado: dict, info_global: dict) -> dict:
     """
-    Compara el top-1 del modelo contra el top-1 de Pl@ntNet.
-    Si top-1 y top-2 del modelo son variantes y Pl@ntNet confirma top-2,
+    Compara el top-1 del modelo contra el top-1 de agente validador.
+    Si top-1 y top-2 del modelo son variantes y agente validador confirma top-2,
     permite seleccionar el top-2 más específico.
     """
     score_modelo_top1 = float(top_k_list[0][1]) if top_k_list else 0.0
@@ -256,7 +256,7 @@ def buscar_coincidencia_nombre_comun(top_k_list: list, plantnet_resultado: dict,
             "score_plantnet": 0.0,
             "nombre_cientifico_plantnet": None,
             "nombres_comunes_plantnet": [],
-            "razon_comparacion": "Pl@ntNet no disponible.",
+            "razon_comparacion": "agente validador no disponible.",
         }
 
     top_pn = plantnet_resultado["resultados"][0]
@@ -352,7 +352,7 @@ def buscar_coincidencia_nombre_comun(top_k_list: list, plantnet_resultado: dict,
                     "nombre_comun_top2": nombre_comun_top2 or nombre_top2,
                     "razon_comparacion": (
                         f"Top-1 ('{especie_modelo_top1}') y top-2 ('{especie_top2}') son variantes. "
-                        f"Pl@ntNet coincide con el top-2 más específico."
+                        f"agente validador coincide con el top-2 más específico."
                     ),
                 }
 
@@ -368,7 +368,7 @@ def buscar_coincidencia_nombre_comun(top_k_list: list, plantnet_resultado: dict,
         "nombres_comunes_plantnet": top_pn.get("nombres_comunes", []),
         "razon_comparacion": (
             f"Top-1 modelo ('{especie_modelo_top1}' {score_modelo_top1*100:.1f}%) "
-            f"no coincide con top-1 Pl@ntNet ('{top_pn.get('nombre_cientifico', '')}' "
+            f"no coincide con top-1 agente validador ('{top_pn.get('nombre_cientifico', '')}' "
             f"score {float(top_pn.get('score', 0.0)):.2f})."
         ),
     }
@@ -423,7 +423,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
                 "species_selected": nombre_comun_m,
                 "source_priority": "fallback_modelo",
                 "contradicts_model": False,
-                "reasoning": f"Confianza alta del modelo ({confianza*100:.1f}%). Pl@ntNet no está disponible.",
+                "reasoning": f"Confianza alta del modelo ({confianza*100:.1f}%). agente validador no está disponible.",
                 "recommended_action": f"Registrar como '{nombre_comun_m}' si la imagen corresponde claramente al árbol.",
             }
         if confianza >= 0.50:
@@ -432,7 +432,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
                 "species_selected": nombre_comun_m,
                 "source_priority": "fallback_modelo",
                 "contradicts_model": False,
-                "reasoning": f"Confianza moderada del modelo ({confianza*100:.1f}%). Pl@ntNet no está disponible.",
+                "reasoning": f"Confianza moderada del modelo ({confianza*100:.1f}%). agente validador no está disponible.",
                 "recommended_action": f"Compare físicamente '{nombre_comun_m}' con '{alt.replace('_', ' ')}' antes de registrar.",
             }
         return {**base,
@@ -440,7 +440,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "species_selected": nombre_comun_m,
             "source_priority": "fallback_modelo",
             "contradicts_model": False,
-            "reasoning": f"Confianza baja del modelo ({confianza*100:.1f}%). Pl@ntNet no está disponible.",
+            "reasoning": f"Confianza baja del modelo ({confianza*100:.1f}%). agente validador no está disponible.",
             "recommended_action": "Tome una nueva foto con buena luz, enfocando hojas, flores, frutos o corteza.",
         }
 
@@ -451,7 +451,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "species_selected_key": None,
             "source_priority": "plantnet_no_planta",
             "contradicts_model": True,
-            "reasoning": "Pl@ntNet no reconoció una planta en la imagen, por eso se invalida la predicción local.",
+            "reasoning": "agente validador no reconoció una planta en la imagen, por eso se invalida la predicción local.",
             "recommended_action": "Tome otra foto donde se vea claramente un árbol, preferiblemente hojas o flores.",
         }
 
@@ -469,7 +469,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
                 "model_prediction_common": nombre_mostrar,
                 "contradicts_model": False,
                 "reasoning": (
-                    f"Pl@ntNet confirma la alternativa más específica del modelo: "
+                    f"agente validador confirma la alternativa más específica del modelo: "
                     f"'{nombre_mostrar}' (top-2 con {score_top2*100:.1f}%)."
                 ),
                 "recommended_action": f"Registrar la observación como '{nombre_mostrar}'.",
@@ -481,8 +481,8 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "source_priority": "modelo_y_plantnet",
             "contradicts_model": False,
             "reasoning": (
-                f"Modelo y Pl@ntNet coinciden. Modelo: {confianza*100:.1f}%; "
-                f"Pl@ntNet: {top_score_pn:.2f}."
+                f"Modelo y agente validador coinciden. Modelo: {confianza*100:.1f}%; "
+                f"agente validador: {top_score_pn:.2f}."
             ),
             "recommended_action": f"Registrar la observación como '{nombre_comun_m}'.",
         }
@@ -494,7 +494,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "source_priority": "modelo",
             "contradicts_model": False,
             "reasoning": f"El modelo tiene confianza prácticamente perfecta ({confianza*100:.2f}%).",
-            "recommended_action": f"Registrar como '{nombre_comun_m}', aunque Pl@ntNet sugiera otra alternativa.",
+            "recommended_action": f"Registrar como '{nombre_comun_m}', aunque agente validador sugiera otra alternativa.",
         }
 
     if confianza < 0.50 and top_score_pn < 0.50:
@@ -503,7 +503,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "species_selected": nombre_comun_m,
             "source_priority": "incertidumbre",
             "contradicts_model": False,
-            "reasoning": f"Modelo ({confianza*100:.1f}%) y Pl@ntNet ({top_score_pn:.2f}) tienen baja confianza.",
+            "reasoning": f"Modelo ({confianza*100:.1f}%) y agente validador ({top_score_pn:.2f}) tienen baja confianza.",
             "recommended_action": "Tome una nueva foto con mejor enfoque y buena iluminación.",
         }
 
@@ -515,11 +515,11 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "source_priority": "plantnet",
             "contradicts_model": True,
             "reasoning": (
-                f"Pl@ntNet tiene mayor score ponderado ({score_pn_pond:.3f}) que el modelo "
+                f"agente validador tiene mayor score ponderado ({score_pn_pond:.3f}) que el modelo "
                 f"({score_m_pond:.3f})."
             ),
             "recommended_action": (
-                f"Revise manualmente. Pl@ntNet sugiere '{top_nombre_pn or top_cient_pn}', "
+                f"Revise manualmente. agente validador sugiere '{top_nombre_pn or top_cient_pn}', "
                 f"mientras el modelo sugiere '{nombre_comun_m}'."
             ),
         }
@@ -530,11 +530,11 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
         "source_priority": "modelo",
         "contradicts_model": True,
         "reasoning": (
-            f"El modelo tiene mayor score ponderado ({score_m_pond:.3f}) que Pl@ntNet "
+            f"El modelo tiene mayor score ponderado ({score_m_pond:.3f}) que agente validador "
             f"({score_pn_pond:.3f}), pero no coinciden."
         ),
         "recommended_action": (
-            f"Revise manualmente. Compare '{nombre_comun_m}' con la sugerencia de Pl@ntNet "
+            f"Revise manualmente. Compare '{nombre_comun_m}' con la sugerencia de agente validador "
             f"'{top_nombre_pn or top_cient_pn}'."
         ),
     }
@@ -583,7 +583,7 @@ NO cambies estos campos:
 
 Datos:
 - Modelo: {decision.get('model_prediction_common')} ({decision.get('model_confidence', 0)*100:.1f}%)
-- Pl@ntNet top-3:
+- agente validador top-3:
 {pn_lista}
 - Comparación: {decision.get('matching_reason', '')}
 

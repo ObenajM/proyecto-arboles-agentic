@@ -158,7 +158,7 @@ function initIdentify() {
   const camBtn = document.getElementById("camera-btn");
 
   zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
-  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+  zone.addEventListener("dragleave", e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("drag-over"); });
   zone.addEventListener("drop", e => {
     e.preventDefault();
     zone.classList.remove("drag-over");

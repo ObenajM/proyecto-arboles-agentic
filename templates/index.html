@@ -119,13 +119,20 @@
 
       <!-- Upload zone -->
       <div class="upload-zone" id="upload-zone">
-        <input type="file" id="file-input" accept="image/*">
-        <div class="upload-icon">🍃</div>
-        <div class="upload-title">Arrastra tu foto aquí</div>
-        <div class="upload-sub">JPG, PNG — o haz clic para seleccionar</div>
-        <div class="upload-or">o</div>
-        <button class="btn-camera" id="camera-btn" type="button">Usar cámara</button>
-        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="file-input" accept="image/*" style="display:none">
+        <div class="upload-options">
+          <label class="upload-option" for="file-input">
+            <div class="upload-opt-icon">📁</div>
+            <div class="upload-opt-title">Subir imagen</div>
+            <div class="upload-opt-sub">Arrastra aquí o haz clic<br>JPG · PNG</div>
+          </label>
+          <div class="upload-opt-sep"></div>
+          <button class="upload-option" id="camera-btn" type="button">
+            <div class="upload-opt-icon">📷</div>
+            <div class="upload-opt-title">Tomar foto</div>
+            <div class="upload-opt-sub">Usa la cámara<br>del dispositivo</div>
+          </button>
+        </div>
       </div>
 
       <!-- Results grid -->

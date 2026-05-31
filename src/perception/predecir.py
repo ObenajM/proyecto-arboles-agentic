@@ -1,9 +1,9 @@
 # predecir.py — Sistema de Clasificación de Árboles
-# Flujo: Imagen → ConvNeXt (modelo local) → Pl@ntNet (validación visual) → Decisión final
+# Flujo: Imagen → ConvNeXt (modelo local) → agente validador (validación visual) → Decisión final
 #
 # Prioridad de decisión (score ponderado):
 #   PESO_MODELO   = 1.00
-#   PESO_PLANTNET = 1.20  ← Pl@ntNet tiene ligera ventaja por ser especializado
+#   PESO_PLANTNET = 1.20  ← agente validador tiene ligera ventaja por ser especializado
 #   Excepción: si modelo >= 99.9% → modelo gana siempre
 
 import warnings
@@ -186,7 +186,7 @@ def obtener_alias_modelo(especie_modelo: str, info: dict) -> Set[str]:
 
 
 # ───────────────────────────────────────────────────────────────────────────
-#  CONSULTA A Pl@ntNet
+#  CONSULTA A agente validador
 # ───────────────────────────────────────────────────────────────────────────
 
 def consultar_plantnet(ruta_imagen: str) -> dict:
@@ -211,7 +211,7 @@ def consultar_plantnet(ruta_imagen: str) -> dict:
 
         if resp.status_code == 404:
             return {"es_planta": False, "resultados": [],
-                    "razon": "Pl@ntNet no reconoció ninguna planta"}
+                    "razon": "agente validador no reconoció ninguna planta"}
 
         if resp.status_code in (500, 502, 503, 504):
             return {"es_planta": None, "resultados": [], "razon": None}
@@ -233,7 +233,7 @@ def consultar_plantnet(ruta_imagen: str) -> dict:
 
         if not resultados:
             return {"es_planta": None, "resultados": [],
-                    "razon": "Pl@ntNet respondió pero sin resultados"}
+                    "razon": "agente validador respondió pero sin resultados"}
 
         top = resultados[0]
         nombre_mostrar = (top["nombres_comunes"][0]
@@ -245,7 +245,7 @@ def consultar_plantnet(ruta_imagen: str) -> dict:
             "top_especie": top["nombre_cientifico"],
             "top_nombre" : nombre_mostrar,
             "top_score"  : top["score"],
-            "razon"      : (f"Pl@ntNet identificó '{nombre_mostrar}' "
+            "razon"      : (f"agente validador identificó '{nombre_mostrar}' "
                             f"({top['nombre_cientifico']}) "
                             f"score {top['score']:.2f}"),
         }
@@ -255,7 +255,7 @@ def consultar_plantnet(ruta_imagen: str) -> dict:
 
 
 # ───────────────────────────────────────────────────────────────────────────
-#  COMPARACIÓN MODELO vs Pl@ntNet
+#  COMPARACIÓN MODELO vs agente validador
 # ───────────────────────────────────────────────────────────────────────────
 
 def buscar_coincidencia_nombre_comun(
@@ -277,7 +277,7 @@ def buscar_coincidencia_nombre_comun(
             "score_plantnet"            : 0,
             "nombre_cientifico_plantnet": None,
             "nombres_comunes_plantnet"  : [],
-            "razon_comparacion"         : "Pl@ntNet no disponible.",
+            "razon_comparacion"         : "agente validador no disponible.",
         }
 
     pn_resultados = plantnet_resultado["resultados"]
@@ -323,7 +323,7 @@ def buscar_coincidencia_nombre_comun(
             "razon_comparacion"         : f"Top-1 coincide por nombre científico: '{top_pn['nombre_cientifico']}'",
         }
 
-    # 3. Verificar si top-2 es variante más específica del top-1 y Pl@ntNet la confirma
+    # 3. Verificar si top-2 es variante más específica del top-1 y agente validador la confirma
     if len(top_k_list) >= 2:
         especie_top2_early = top_k_list[1][0]
         score_top2_early   = top_k_list[1][1]
@@ -371,7 +371,7 @@ def buscar_coincidencia_nombre_comun(
                     "razon_comparacion"         : (
                         f"Top-1 ('{especie_modelo_top1}') y top-2 ('{especie_top2_early}') "
                         f"son variantes del mismo nombre. "
-                        f"Pl@ntNet confirma el más específico: '{top_pn['nombre_cientifico']}'"
+                        f"agente validador confirma el más específico: '{top_pn['nombre_cientifico']}'"
                     ),
                 }
 
@@ -440,7 +440,7 @@ def buscar_coincidencia_nombre_comun(
                     "razon_comparacion"         : (
                         f"Top-1 ('{especie_modelo_top1}') y top-2 ('{especie_top2}') "
                         f"son variantes del mismo nombre. "
-                        f"Pl@ntNet coincide con el top-2 más específico: "
+                        f"agente validador coincide con el top-2 más específico: "
                         f"'{top_pn['nombre_cientifico']}'"
                     ),
                 }
@@ -458,7 +458,7 @@ def buscar_coincidencia_nombre_comun(
         "nombres_comunes_plantnet"  : top_pn["nombres_comunes"],
         "razon_comparacion"         : (
             f"Top-1 modelo ('{especie_modelo_top1}' {score_modelo_top1*100:.1f}%) "
-            f"no coincide con top-1 Pl@ntNet "
+            f"no coincide con top-1 agente validador "
             f"('{top_pn['nombre_cientifico']}' score {top_pn['score']:.2f})."
         ),
     }
@@ -506,9 +506,9 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
         "web_evidence_used"              : plantnet_ok,
     }
 
-    # CASO 1: Pl@ntNet no disponible
+    # CASO 1: agente validador no disponible
     if not plantnet_ok and es_planta is None:
-        sin_pn = " (Pl@ntNet no disponible)."
+        sin_pn = " (agente validador no disponible)."
         if confianza >= 0.75:
             return {**base,
                 "decision"          : "aceptar_prediccion",
@@ -544,9 +544,9 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "source_priority"   : "plantnet_no_planta",
             "contradicts_model" : True,
             "reasoning"         : (
-                f"Pl@ntNet no reconoció ninguna planta en la imagen. "
+                f"agente validador no reconoció ninguna planta en la imagen. "
                 f"El modelo predijo '{nombre_comun_m}' ({confianza*100:.1f}%) "
-                f"pero Pl@ntNet tiene prioridad."
+                f"pero agente validador tiene prioridad."
             ),
             "recommended_action": (
                 "La imagen no parece ser de un árbol. "
@@ -569,9 +569,9 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
                 "model_prediction_common": nombre_mostrar,
                 "contradicts_model"      : False,
                 "reasoning"              : (
-                    f"Pl@ntNet confirma la especie más específica del modelo: "
+                    f"agente validador confirma la especie más específica del modelo: "
                     f"'{nombre_mostrar}' (top-2 con {score_top2*100:.1f}%). "
-                    f"Pl@ntNet: {top_score_pn:.2f} ({top_cient_pn})."
+                    f"agente validador: {top_score_pn:.2f} ({top_cient_pn})."
                 ),
                 "recommended_action": f"Registrar la observación como '{nombre_mostrar}'.",
             }
@@ -583,9 +583,9 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "source_priority"   : "modelo_y_plantnet",
             "contradicts_model" : False,
             "reasoning"         : (
-                f"Modelo y Pl@ntNet coinciden en '{nombre_compartido}'. "
+                f"Modelo y agente validador coinciden en '{nombre_compartido}'. "
                 f"Modelo: '{nombre_mostrar}' {confianza*100:.1f}% | "
-                f"Pl@ntNet: {top_score_pn:.2f} ({top_cient_pn})."
+                f"agente validador: {top_score_pn:.2f} ({top_cient_pn})."
             ),
             "recommended_action": f"Registrar la observación como '{nombre_mostrar}'.",
         }
@@ -600,7 +600,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "reasoning"         : (
                 f"El modelo tiene confianza prácticamente perfecta "
                 f"({confianza*100:.2f}%), por lo que tiene prioridad. "
-                f"Pl@ntNet sugirió '{top_nombre_pn}' (score {top_score_pn:.2f})."
+                f"agente validador sugirió '{top_nombre_pn}' (score {top_score_pn:.2f})."
             ),
             "recommended_action": f"Registrar como '{nombre_comun_m}' (modelo ~100%).",
         }
@@ -613,7 +613,7 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "source_priority"   : "incertidumbre",
             "contradicts_model" : False,
             "reasoning"         : (
-                f"Tanto el modelo ({confianza*100:.1f}%) como Pl@ntNet "
+                f"Tanto el modelo ({confianza*100:.1f}%) como agente validador "
                 f"(score {top_score_pn:.2f}) tienen baja confianza."
             ),
             "recommended_action": (
@@ -630,14 +630,14 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "source_priority"   : "plantnet",
             "contradicts_model" : True,
             "reasoning"         : (
-                f"Pl@ntNet sugiere '{top_nombre_pn}' (score ponderado "
+                f"agente validador sugiere '{top_nombre_pn}' (score ponderado "
                 f"{score_pn_pond:.3f}) vs modelo '{nombre_comun_m}' "
                 f"(score ponderado {score_m_pond:.3f}). "
-                f"Pl@ntNet tiene mayor score ponderado."
+                f"agente validador tiene mayor score ponderado."
             ),
             "recommended_action": (
                 f"Revisión manual recomendada. "
-                f"Pl@ntNet sugiere '{top_nombre_pn}' ({top_cient_pn}). "
+                f"agente validador sugiere '{top_nombre_pn}' ({top_cient_pn}). "
                 f"Consulte un experto botánico."
             ),
         }
@@ -649,14 +649,14 @@ def _reglas_decision(estado: EstadoArbol) -> dict:
             "contradicts_model" : True,
             "reasoning"         : (
                 f"El modelo sugiere '{nombre_comun_m}' (score ponderado "
-                f"{score_m_pond:.3f}) vs Pl@ntNet '{top_nombre_pn}' "
+                f"{score_m_pond:.3f}) vs agente validador '{top_nombre_pn}' "
                 f"(score ponderado {score_pn_pond:.3f}). "
                 f"El modelo tiene mayor score ponderado."
             ),
             "recommended_action": (
                 f"Revisión manual recomendada. "
                 f"El modelo predijo '{nombre_comun_m}', "
-                f"Pl@ntNet sugiere '{top_nombre_pn}'. "
+                f"agente validador sugiere '{top_nombre_pn}'. "
                 f"Compare físicamente."
             ),
         }
@@ -691,7 +691,7 @@ DECISIÓN TOMADA (NO LA CAMBIES):
 
 DATOS:
   Modelo predijo   : {decision['model_prediction_common']} ({decision['model_confidence']*100:.1f}%)
-  Pl@ntNet top-3   :
+  agente validador top-3   :
 {pn_lista}
   Razón comparación: {decision.get('matching_reason','')}
 
@@ -795,7 +795,7 @@ def _evaluar_salud_con_numpy(ruta_imagen: str, especie_pred: str = "") -> dict:
             "recomendacion": recomendacion,
             "metodo"       : "analisis_color_numpy",
             "limitacion"   : (
-                "Diagnóstico por análisis de color (Pl@ntNet no fue concluyente)."
+                "Diagnóstico por análisis de color (agente validador no fue concluyente)."
                 + nota +
                 " No reemplaza revisión fitosanitaria profesional."
             ),
@@ -808,14 +808,14 @@ def _evaluar_salud_con_numpy(ruta_imagen: str, especie_pred: str = "") -> dict:
 
 
 def evaluar_salud_visual(ruta_imagen: str, especie_pred: str = "") -> dict:
-    """Evalúa el estado visual de salud del árbol con Pl@ntNet + numpy como fallback."""
+    """Evalúa el estado visual de salud del árbol con agente validador + numpy como fallback."""
     UMBRAL_SCORE_CONFIABLE = 0.15
     plantnet_key = os.environ.get("PLANTNET_KEY", "").strip()
 
     if plantnet_key and ruta_imagen and os.path.isfile(ruta_imagen):
         try:
             import requests
-            print("   🔬 Analizando hojas con Pl@ntNet...")
+            print("   🔬 Analizando hojas con agente validador...")
             with open(ruta_imagen, "rb") as f:
                 resp = requests.post(
                     "https://my-api.plantnet.org/v2/identify/all",
@@ -839,12 +839,12 @@ def evaluar_salud_visual(ruta_imagen: str, especie_pred: str = "") -> dict:
                         "estado"       : "aparentemente_sano",
                         "score_hoja"   : round(score_pn, 3),
                         "recomendacion": (
-                            f"Pl@ntNet reconoció las hojas con score {score_pn:.2f}. "
+                            f"agente validador reconoció las hojas con score {score_pn:.2f}. "
                             "El follaje parece estar en buen estado."
                         ),
                         "metodo"       : "plantnet_leaf",
                         "limitacion"   : (
-                            "Basado en reconocimiento visual de hojas por Pl@ntNet. "
+                            "Basado en reconocimiento visual de hojas por agente validador. "
                             "No reemplaza revisión fitosanitaria profesional."
                         ),
                     }
@@ -853,7 +853,7 @@ def evaluar_salud_visual(ruta_imagen: str, especie_pred: str = "") -> dict:
                         "estado"       : "estres_moderado",
                         "score_hoja"   : round(score_pn, 3),
                         "recomendacion": (
-                            f"Pl@ntNet reconoció las hojas con score moderado {score_pn:.2f}. "
+                            f"agente validador reconoció las hojas con score moderado {score_pn:.2f}. "
                             "Posible estrés o imagen poco clara. Verificar en campo."
                         ),
                         "metodo"       : "plantnet_leaf",
@@ -863,13 +863,13 @@ def evaluar_salud_visual(ruta_imagen: str, especie_pred: str = "") -> dict:
                         ),
                     }
                 else:
-                    print(f"   ⚠️  Pl@ntNet leaf score bajo ({score_pn:.2f}) — usando análisis de color.")
+                    print(f"   ⚠️  agente validador leaf score bajo ({score_pn:.2f}) — usando análisis de color.")
 
             elif resp.status_code == 404:
-                print("   ⚠️  Pl@ntNet no detectó hojas — usando análisis de color.")
+                print("   ⚠️  agente validador no detectó hojas — usando análisis de color.")
 
         except Exception as e:
-            print(f"   ⚠️  Pl@ntNet leaf: {e} — usando análisis de color.")
+            print(f"   ⚠️  agente validador leaf: {e} — usando análisis de color.")
 
     return _evaluar_salud_con_numpy(ruta_imagen, especie_pred)
 
@@ -889,13 +889,13 @@ def health_assessment_agent(estado: EstadoArbol) -> EstadoArbol:
         if top_score_pn >= 0.25:
             estado_salud  = "aparentemente_sano"
             recomendacion = (
-                f"Pl@ntNet reconoció '{top_nombre}' con score {top_score_pn:.2f}. "
+                f"agente validador reconoció '{top_nombre}' con score {top_score_pn:.2f}. "
                 "El árbol parece visualmente saludable."
             )
         elif top_score_pn >= 0.10:
             estado_salud  = "estres_moderado"
             recomendacion = (
-                f"Pl@ntNet reconoció '{top_nombre}' con score moderado "
+                f"agente validador reconoció '{top_nombre}' con score moderado "
                 f"({top_score_pn:.2f}). Verifique el estado del follaje en campo."
             )
         else:
@@ -913,7 +913,7 @@ def health_assessment_agent(estado: EstadoArbol) -> EstadoArbol:
             "recomendacion": recomendacion,
             "metodo"       : "plantnet_score",
             "limitacion"   : (
-                "Basado en el score de Pl@ntNet complementado con análisis de color. "
+                "Basado en el score de agente validador complementado con análisis de color. "
                 "No reemplaza revisión fitosanitaria profesional."
             ),
             "pct_verde"    : numpy_datos.get("pct_verde",  0),
@@ -925,7 +925,7 @@ def health_assessment_agent(estado: EstadoArbol) -> EstadoArbol:
         salud = {
             "estado"       : "no_es_planta",
             "score_hoja"   : 0,
-            "recomendacion": "Pl@ntNet no reconoció ninguna planta. La imagen no parece ser de un árbol.",
+            "recomendacion": "agente validador no reconoció ninguna planta. La imagen no parece ser de un árbol.",
             "metodo"       : "plantnet_score",
             "limitacion"   : "No aplica evaluación de salud.",
             "pct_verde"    : 0,
@@ -951,7 +951,7 @@ def web_species_research_agent(estado: EstadoArbol) -> EstadoArbol:
     top_k_list  = estado["top_k_list"]
     info_global = estado.get("info_global", {})
 
-    print("   🌐 Pl@ntNet: analizando imagen...")
+    print("   🌐 agente validador: analizando imagen...")
 
     plantnet = (
         consultar_plantnet(ruta_imagen)
@@ -960,7 +960,7 @@ def web_species_research_agent(estado: EstadoArbol) -> EstadoArbol:
     )
     razon_pn = plantnet.get("razon")
     if razon_pn:
-        print(f"   📋 Pl@ntNet: {razon_pn}")
+        print(f"   📋 agente validador: {razon_pn}")
 
     comparacion = buscar_coincidencia_nombre_comun(top_k_list, plantnet, info_global)
 
@@ -1092,7 +1092,7 @@ def mostrar_resultado_completo(estado_final: dict):
         score_pn_p = d.get("plantnet_weighted_score", 0)
         print("   No coinciden.")
         if source == "plantnet":
-            print(f"   Prioridad: Pl@ntNet  (score ponderado {score_pn_p:.3f} > {score_m_p:.3f})")
+            print(f"   Prioridad: agente validador  (score ponderado {score_pn_p:.3f} > {score_m_p:.3f})")
         elif source == "modelo":
             print(f"   Prioridad: Modelo    (score ponderado {score_m_p:.3f} > {score_pn_p:.3f})")
 
@@ -1106,7 +1106,7 @@ def mostrar_resultado_completo(estado_final: dict):
 
     if d.get("contradicts_model"):
         print()
-        print("   ⚠️  Pl@ntNet contradice la predicción del modelo.")
+        print("   ⚠️  agente validador contradice la predicción del modelo.")
 
     print(SEP)
     print()
@@ -1145,11 +1145,11 @@ def mostrar_salud_arbol(estado_final: dict):
             print(f"   Razón             : {razon}")
     else:
         if usa_plantnet:
-            print(f"   Score (Pl@ntNet)  : {salud.get('score_hoja', 0):.3f}")
+            print(f"   Score (agente validador)  : {salud.get('score_hoja', 0):.3f}")
         print(f"   Porcentaje verde  : {salud.get('pct_verde',  0)}%")
         print(f"   Porcentaje seco   : {salud.get('pct_seco',   0)}%")
         print(f"   Porcentaje marrón : {salud.get('pct_marron', 0)}%")
-        metodo_str = ("Pl@ntNet + análisis de color" if usa_plantnet
+        metodo_str = ("agente validador + análisis de color" if usa_plantnet
                       else "análisis de color (numpy)")
         print(f"   Método            : {metodo_str}")
         print(f"   Recomendación     : {salud.get('recomendacion', '')}")

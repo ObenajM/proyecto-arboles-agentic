@@ -428,44 +428,59 @@ a { color: inherit; text-decoration: none; }
   border: 2.5px dashed var(--sage-200);
   border-radius: var(--r-2xl);
   background: linear-gradient(135deg, var(--sage-50) 0%, var(--cream-100) 100%);
-  padding: 3.5rem 2rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all .2s;
+  padding: 2rem;
+  transition: border-color .2s, background .2s;
   position: relative;
-  overflow: hidden;
 }
-.upload-zone:hover, .upload-zone.drag-over {
+.upload-zone.drag-over {
   border-color: var(--forest-400);
   background: linear-gradient(135deg, #D0EFE0 0%, var(--sage-50) 100%);
-  transform: scale(1.01);
 }
-.upload-zone input[type="file"] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer;
-}
-.upload-icon { font-size: 3rem; margin-bottom: .75rem; opacity: .6; }
-.upload-title {
-  font-family: 'Fraunces', serif;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--forest-600);
-  margin-bottom: .4rem;
-}
-.upload-sub { font-size: .85rem; color: var(--neutral-500); }
-.upload-or {
+.upload-options {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin: 1.5rem 0;
-  color: var(--neutral-400);
-  font-size: .82rem;
-  font-weight: 600;
+  gap: 1.25rem;
+  align-items: stretch;
 }
-.upload-or::before, .upload-or::after {
-  content: '';
+.upload-option {
   flex: 1;
-  height: 1px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: .6rem;
+  padding: 2.25rem 1.25rem;
+  border-radius: var(--r-xl);
+  border: 1.5px solid var(--neutral-200);
+  background: var(--white);
+  cursor: pointer;
+  transition: border-color .18s, background .18s, transform .18s, box-shadow .18s;
+  color: var(--forest-700);
+  font-family: inherit;
+}
+.upload-option:hover {
+  border-color: var(--forest-400);
+  background: var(--sage-50);
+  transform: translateY(-3px);
+  box-shadow: var(--sh-md);
+}
+.upload-opt-icon { font-size: 2.5rem; opacity: .75; }
+.upload-opt-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--forest-700);
+}
+.upload-opt-sub { font-size: .82rem; color: var(--neutral-500); line-height: 1.5; }
+.upload-opt-sep {
+  width: 1px;
   background: var(--neutral-200);
+  align-self: stretch;
+  margin: 1rem 0;
+}
+@media (max-width: 520px) {
+  .upload-options { flex-direction: column; }
+  .upload-opt-sep { width: auto; height: 1px; margin: 0 1rem; }
 }
 .btn-camera {
   display: inline-flex;

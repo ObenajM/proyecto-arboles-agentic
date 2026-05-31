@@ -75,6 +75,7 @@ class EstadoArbol(TypedDict):
     plantnet_resultado: dict
     comparacion: dict
     decision_final: dict
+    salud_arbol: dict
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -624,6 +625,224 @@ Responde solo JSON válido:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Evaluación visual de salud del árbol
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Especies con flores/frutos de color amarillo, rosado o anaranjado donde ese
+# color NO debe interpretarse como señal de estrés.
+ESPECIES_COLOR_FLORAL: Set[str] = {
+    "guayacan_amarillo", "guayacan_rosado", "cambulo", "flamboyan",
+    "tulipan_africano", "acacia", "araguaney",
+}
+
+
+def _evaluar_salud_con_numpy(ruta_imagen: str, especie_pred: str = "") -> dict:
+    """Fallback: análisis de color píxel a píxel cuando el agente validador no es concluyente."""
+    especie_normalizada = especie_pred.lower().replace(" ", "_")
+    ignorar_amarillo = especie_normalizada in ESPECIES_COLOR_FLORAL
+
+    try:
+        import numpy as np
+        from PIL import Image as PILImage
+
+        img = PILImage.open(ruta_imagen).convert("RGB")
+        img = img.resize((300, 300))
+        arr = np.array(img, dtype=np.float32) / 255.0
+        r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+        total = r.size
+
+        mask_cielo        = (b > 0.45) & (b > g * 1.20) & (b > r * 1.20)
+        mask_verde_claro  = (g > 0.25) & (g > r * 1.08) & (g > b * 0.88) & ~mask_cielo
+        mask_verde_oscuro = (g > r * 1.12) & (g > b * 1.10) & (g > 0.08) & (g < 0.28) & ~mask_cielo & ~mask_verde_claro
+        mask_verde        = mask_verde_claro | mask_verde_oscuro
+        mask_seco         = (
+            np.zeros_like(r, dtype=bool) if ignorar_amarillo
+            else (r > 0.45) & (g > 0.35) & (b < 0.32) & ~mask_verde & ~mask_cielo
+        )
+        mask_marron = (r > 0.28) & (g < r * 0.80) & (b < r * 0.70) & ~mask_verde & ~mask_seco & ~mask_cielo
+
+        pct_verde  = int(mask_verde.sum()  / total * 100)
+        pct_seco   = int(mask_seco.sum()   / total * 100)
+        pct_marron = int(mask_marron.sum() / total * 100)
+
+        if pct_verde >= 25 and pct_seco < 20:
+            estado        = "aparentemente_sano"
+            recomendacion = "El árbol parece visualmente saludable (análisis de color)."
+        elif pct_verde >= 12 and 20 <= pct_seco < 40:
+            estado        = "estres_moderado"
+            recomendacion = "Se observan áreas secas. Verificar riego y suelo."
+        elif pct_seco >= 40 or pct_verde < 12:
+            estado        = "posible_enfermedad"
+            recomendacion = "Alto porcentaje de follaje seco. Revisión fitosanitaria recomendada."
+        else:
+            estado        = "indeterminado"
+            recomendacion = "No se pudo determinar el estado con certeza."
+
+        nota = f" (colores florales de '{especie_pred}' excluidos)" if ignorar_amarillo else ""
+        return {
+            "estado"       : estado,
+            "pct_verde"    : pct_verde,
+            "pct_seco"     : pct_seco,
+            "pct_marron"   : pct_marron,
+            "recomendacion": recomendacion,
+            "metodo"       : "analisis_color_numpy",
+            "limitacion"   : (
+                "Diagnóstico por análisis de color." + nota +
+                " No reemplaza revisión fitosanitaria profesional."
+            ),
+        }
+    except ImportError:
+        return {"estado": "no_determinado", "metodo": "numpy_no_disponible",
+                "razon": "Instala numpy: pip install numpy"}
+    except Exception as exc:
+        return {"estado": "no_determinado", "metodo": "error", "razon": str(exc)}
+
+
+def evaluar_salud_visual(ruta_imagen: str, especie_pred: str = "") -> dict:
+    """
+    Evalúa salud visual en dos pasos:
+      Paso 1 — agente validador con organs=leaf (si PLANTNET_KEY disponible):
+        score >= 0.30  → aparentemente_sano
+        score  0.15-0.29 → estres_moderado
+        score < 0.15 / 404 → follaje deteriorado → numpy
+      Paso 2 — fallback numpy si Pl@ntNet score < 0.15 o no disponible.
+    """
+    UMBRAL_SCORE_CONFIABLE = 0.15
+    plantnet_key = os.environ.get("PLANTNET_KEY", "").strip()
+
+    if plantnet_key and ruta_imagen and os.path.isfile(ruta_imagen):
+        try:
+            import requests
+            with open(ruta_imagen, "rb") as fh:
+                resp = requests.post(
+                    "https://my-api.plantnet.org/v2/identify/all",
+                    params={"api-key": plantnet_key, "lang": "es", "nb-results": 3, "organs": "leaf"},
+                    files={"images": fh},
+                    timeout=20,
+                )
+
+            if resp.status_code == 200:
+                datos    = resp.json()
+                top_r    = datos.get("results", [])
+                score_pn = float(top_r[0].get("score", 0)) if top_r else 0.0
+
+                if score_pn >= 0.30:
+                    return {
+                        "estado"       : "aparentemente_sano",
+                        "score_hoja"   : round(score_pn, 3),
+                        "pct_verde"    : None,
+                        "pct_seco"     : None,
+                        "pct_marron"   : None,
+                        "recomendacion": (
+                            f"El agente validador reconoció las hojas con score {score_pn:.2f}. "
+                            "El follaje parece estar en buen estado."
+                        ),
+                        "metodo"       : "plantnet_leaf",
+                        "limitacion"   : (
+                            "Basado en reconocimiento visual de hojas. "
+                            "No reemplaza revisión fitosanitaria profesional."
+                        ),
+                    }
+                if score_pn >= UMBRAL_SCORE_CONFIABLE:
+                    return {
+                        "estado"       : "estres_moderado",
+                        "score_hoja"   : round(score_pn, 3),
+                        "pct_verde"    : None,
+                        "pct_seco"     : None,
+                        "pct_marron"   : None,
+                        "recomendacion": (
+                            f"El agente validador reconoció las hojas con score moderado {score_pn:.2f}. "
+                            "Posible estrés o imagen poco clara. Verificar en campo."
+                        ),
+                        "metodo"       : "plantnet_leaf",
+                        "limitacion"   : (
+                            "Score moderado puede indicar hojas deterioradas o ángulo de foto. "
+                            "No reemplaza revisión fitosanitaria profesional."
+                        ),
+                    }
+                # Score muy bajo → numpy
+        except Exception:
+            pass  # silencioso, caer a numpy
+
+    return _evaluar_salud_con_numpy(ruta_imagen, especie_pred)
+
+
+def health_assessment_agent(estado: EstadoArbol) -> EstadoArbol:
+    """
+    Evalúa el estado visual de salud del árbol.
+
+    Prioridad:
+      1. Score del agente validador del paso de identificación (si es_planta=True):
+           score >= 0.25 → aparentemente_sano
+           score 0.10-0.24 → estres_moderado
+           score < 0.10  → indeterminado
+         + porcentajes de color desde numpy como dato complementario.
+      2. evaluar_salud_visual (agente leaf + numpy) si Kindwise no identificó planta.
+      3. numpy puro si agente no estuvo disponible.
+    """
+    ruta_imagen  = estado.get("ruta_imagen", "")
+    especie_pred = estado.get("especie_pred", "")
+    plantnet     = estado.get("plantnet_resultado", {})
+    top_score_pn = float(plantnet.get("top_score", 0) or 0)
+    es_planta    = plantnet.get("es_planta")
+
+    if es_planta is True and top_score_pn > 0:
+        top_nombre = plantnet.get("top_nombre") or plantnet.get("top_especie") or especie_pred
+
+        if top_score_pn >= 0.25:
+            estado_salud  = "aparentemente_sano"
+            recomendacion = (
+                f"El agente validador reconoció '{top_nombre}' con score {top_score_pn:.2f}. "
+                "El árbol parece visualmente saludable."
+            )
+        elif top_score_pn >= 0.10:
+            estado_salud  = "estres_moderado"
+            recomendacion = (
+                f"El agente validador reconoció '{top_nombre}' con score moderado "
+                f"({top_score_pn:.2f}). Verifique el estado del follaje en campo."
+            )
+        else:
+            estado_salud  = "indeterminado"
+            recomendacion = (
+                f"Score muy bajo ({top_score_pn:.2f}). "
+                "La imagen puede no mostrar el follaje claramente. "
+                "Se recomienda tomar una nueva foto enfocando las hojas."
+            )
+
+        numpy_datos = _evaluar_salud_con_numpy(ruta_imagen, especie_pred)
+        salud = {
+            "estado"       : estado_salud,
+            "score_hoja"   : round(top_score_pn, 3),
+            "pct_verde"    : numpy_datos.get("pct_verde",  0),
+            "pct_seco"     : numpy_datos.get("pct_seco",   0),
+            "pct_marron"   : numpy_datos.get("pct_marron", 0),
+            "recomendacion": recomendacion,
+            "metodo"       : "plantnet_score",
+            "limitacion"   : (
+                "Basado en el score del agente validador complementado con análisis de color. "
+                "No reemplaza revisión fitosanitaria profesional."
+            ),
+        }
+
+    elif es_planta is False:
+        salud = {
+            "estado"       : "no_es_planta",
+            "score_hoja"   : 0,
+            "pct_verde"    : 0,
+            "pct_seco"     : 0,
+            "pct_marron"   : 0,
+            "recomendacion": "El agente validador no reconoció ninguna planta. La imagen no parece ser de un árbol.",
+            "metodo"       : "plantnet_score",
+            "limitacion"   : "No aplica evaluación de salud.",
+        }
+
+    else:
+        salud = evaluar_salud_visual(ruta_imagen, especie_pred)
+
+    return {**estado, "salud_arbol": salud}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Nodos del agente
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -655,12 +874,14 @@ def construir_grafo():
 
     graph = StateGraph(EstadoArbol)
     graph.add_node("validator", prediction_validator_agent)
-    graph.add_node("plantnet", web_species_research_agent)
-    graph.add_node("final", final_decision_agent)
+    graph.add_node("plantnet",  web_species_research_agent)
+    graph.add_node("final",     final_decision_agent)
+    graph.add_node("health",    health_assessment_agent)
     graph.set_entry_point("validator")
     graph.add_edge("validator", "plantnet")
-    graph.add_edge("plantnet", "final")
-    graph.add_edge("final", END)
+    graph.add_edge("plantnet",  "final")
+    graph.add_edge("final",     "health")
+    graph.add_edge("health",    END)
     return graph.compile()
 
 
@@ -674,15 +895,16 @@ def ejecutar_agente(
 ) -> dict:
     """Punto de entrada que llama main.py después de run_inference()."""
     estado_inicial: EstadoArbol = {
-        "especie_pred": especie_pred,
-        "confianza": float(confianza),
-        "top_k_list": [(str(k), float(v)) for k, v in top_k_list],
-        "info_especie": info_especie or {},
-        "info_global": info_global or {},
-        "ruta_imagen": ruta_imagen or "",
+        "especie_pred"      : especie_pred,
+        "confianza"         : float(confianza),
+        "top_k_list"        : [(str(k), float(v)) for k, v in top_k_list],
+        "info_especie"      : info_especie or {},
+        "info_global"       : info_global or {},
+        "ruta_imagen"       : ruta_imagen or "",
         "plantnet_resultado": {},
-        "comparacion": {},
-        "decision_final": {},
+        "comparacion"       : {},
+        "decision_final"    : {},
+        "salud_arbol"       : {},
     }
 
     graph = construir_grafo()
@@ -691,4 +913,5 @@ def ejecutar_agente(
 
     estado = prediction_validator_agent(estado_inicial)
     estado = web_species_research_agent(estado)
-    return final_decision_agent(estado)
+    estado = final_decision_agent(estado)
+    return health_assessment_agent(estado)

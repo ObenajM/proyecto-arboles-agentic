@@ -171,7 +171,7 @@ def _ensure_csv_headers() -> None:
 def _get_github_config() -> dict | None:
     token    = os.environ.get("GITHUB_TOKEN")
     repo     = os.environ.get("GITHUB_REPO",     GITHUB_REPO)
-    branch   = os.environ.get("GITHUB_BRANCH",   "main")
+    branch   = os.environ.get("GITHUB_BRANCH",   "feature/fastapi-pwa")
     csv_path = os.environ.get("GITHUB_CSV_PATH", GITHUB_CSV_PATH)
     return {"token": token, "repo": repo, "branch": branch, "csv_path": csv_path} if token else None
 

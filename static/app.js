@@ -728,13 +728,10 @@ function populateTriviaSelect() {
 
 function applyDetectedToTrivia() {
   const sel = document.getElementById("trivia-species-select");
-  if (!sel) return;
+  if (!sel || !sel.options.length) return;
   const detectedKey = state.detectedSpecies?.key;
   if (detectedKey) sel.value = detectedKey;
-  // Arrancar nueva ronda solo si la especie cambió
-  if (sel.value !== state.triviaKey) {
-    startTriviaRound();
-  }
+  startTriviaRound();
 }
 
 function startTriviaRound() {

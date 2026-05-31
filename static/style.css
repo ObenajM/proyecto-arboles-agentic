@@ -684,6 +684,34 @@ a { color: inherit; text-decoration: none; }
   transition: width .6s ease;
 }
 
+/* ── Invalid image pred-card ───────────────────────────────────────────────── */
+.pred-card-invalid::before {
+  background: linear-gradient(180deg, #EF4444, #FCA5A5) !important;
+}
+.pred-name-invalid {
+  font-family: 'Fraunces', serif;
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: #DC2626;
+  line-height: 1.05;
+  letter-spacing: -.025em;
+  margin-bottom: .8rem;
+}
+.pred-invalid-msg {
+  font-size: .9rem;
+  color: #7F1D1D;
+  line-height: 1.7;
+  background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
+  border: 1px solid #FECDD3;
+  border-radius: var(--r-md);
+  padding: 1rem 1.2rem;
+}
+.pred-invalid-tips {
+  margin: .4rem 0 0 1.2rem;
+  padding: 0;
+}
+.pred-invalid-tips li { margin: .25rem 0; }
+
 /* ── Alternatives ──────────────────────────────────────────────────────────── */
 .alts-label {
   font-size: .67rem;

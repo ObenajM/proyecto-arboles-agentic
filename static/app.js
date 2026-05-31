@@ -214,25 +214,32 @@ async function runPredict(file) {
     state.plantnetResult = plantnet || null;
     state.comparison = comparison || null;
 
-    const selectedKey = getSelectedSpeciesKey(results, agent_decision);
-    const selectedResult = results.find(r => r.key === selectedKey) || results[0];
-    state.detectedSpecies = selectedResult;
-
     renderPredictions(results, resultBox, agent_decision, plantnet, comparison, agent_error, health);
-    renderSpeciesInfo(selectedResult.key, document.getElementById("species-info-box"), selectedResult.info || null);
-    document.getElementById("species-info-box").style.display = "block";
 
-    // Update trivia / map detected badge
-    const badgeName = getFinalSpeciesName();
-    document.querySelectorAll(".detected-name").forEach(el => {
-      el.textContent = badgeName;
-    });
-    document.querySelectorAll(".detected-badge-wrap").forEach(el => el.style.display = "flex");
+    if (agent_decision?.decision === "imagen_incorrecta") {
+      state.detectedSpecies = null;
+      document.getElementById("species-info-box").style.display = "none";
+      document.querySelectorAll(".detected-badge-wrap").forEach(el => el.style.display = "none");
+    } else {
+      const selectedKey = getSelectedSpeciesKey(results, agent_decision);
+      const selectedResult = results.find(r => r.key === selectedKey) || results[0];
+      state.detectedSpecies = selectedResult;
 
-    // Si el select de trivia ya está renderizado, apuntarlo a la especie detectada
-    const trivSel = document.getElementById("trivia-species-select");
-    if (trivSel && trivSel.options.length > 0 && state.detectedSpecies?.key) {
-      trivSel.value = state.detectedSpecies.key;
+      renderSpeciesInfo(selectedResult.key, document.getElementById("species-info-box"), selectedResult.info || null);
+      document.getElementById("species-info-box").style.display = "block";
+
+      // Update trivia / map detected badge
+      const badgeName = getFinalSpeciesName();
+      document.querySelectorAll(".detected-name").forEach(el => {
+        el.textContent = badgeName;
+      });
+      document.querySelectorAll(".detected-badge-wrap").forEach(el => el.style.display = "flex");
+
+      // Si el select de trivia ya está renderizado, apuntarlo a la especie detectada
+      const trivSel = document.getElementById("trivia-species-select");
+      if (trivSel && trivSel.options.length > 0 && state.detectedSpecies?.key) {
+        trivSel.value = state.detectedSpecies.key;
+      }
     }
   } catch (err) {
     resultBox.innerHTML = `<div class="alert alert-warn">⚠️ Error al analizar: ${err.message}</div>`;
@@ -240,9 +247,48 @@ async function runPredict(file) {
 }
 
 function renderPredictions(results, container, agentDecision = null, plantnet = null, comparison = null, agentError = null, health = null) {
-  const top  = results[0];
-  const conf = top.prob;
-  const sci  = top.info?.nombre_cientifico || "";
+  if (agentDecision?.decision === "imagen_incorrecta") {
+    container.innerHTML = `
+      <div class="pred-card pred-card-invalid">
+        <div class="pred-label">Resultado de identificación</div>
+        <div class="pred-name-invalid">🚫 Especie no válida</div>
+        <div class="pred-invalid-msg">
+          El agente validador no detectó ninguna planta en esta imagen.<br>
+          Para una identificación exitosa, toma una nueva imagen:<br><br>
+          <ul class="pred-invalid-tips">
+            <li>Enfoca bien las <strong>hojas</strong> con fondo despejado</li>
+            <li>Captura las <strong>flores o frutos</strong> si los tiene</li>
+            <li>Usa <strong>luz natural</strong> y evita sombras fuertes</li>
+            <li>Mantén la cámara estable para <strong>evitar el desenfoque</strong></li>
+          </ul>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Determine the final species: agent winner takes priority over raw model top-1
+  let finalName, finalSci, conf, cardLabel;
+  if (agentDecision && agentDecision.decision) {
+    const src       = agentDecision.source_priority || "";
+    const finalKey  = agentDecision.species_selected_key;
+    const matched   = finalKey ? results.find(r => r.key === finalKey) : null;
+    finalName = agentDecision.species_selected || matched?.name || results[0].name;
+    finalSci  = matched?.info?.nombre_cientifico
+      || (src === "plantnet" ? agentDecision.plantnet_prediction_scientific || "" : "");
+    // Use the score from the winning source
+    conf      = src === "plantnet"
+      ? Number(agentDecision.plantnet_score      || 0)
+      : Number(agentDecision.model_confidence    || 0);
+    cardLabel = "Especie identificada";
+  } else {
+    const top = results[0];
+    finalName = top.name;
+    finalSci  = top.info?.nombre_cientifico || "";
+    conf      = top.prob;
+    cardLabel = "Especie detectada por el modelo";
+  }
+
   const confCls = conf >= .75 ? "pill-green" : conf >= .50 ? "pill-amber" : "pill-red";
   const confLbl = conf >= .75 ? "Alta" : conf >= .50 ? "Moderada" : "Baja";
 
@@ -266,9 +312,9 @@ function renderPredictions(results, container, agentDecision = null, plantnet = 
 
   container.innerHTML = `
     <div class="pred-card">
-      <div class="pred-label">Especie detectada por el modelo</div>
-      <div class="pred-name">${esc(top.name)}</div>
-      ${sci ? `<div class="pred-sci">${esc(sci)}</div>` : ""}
+      <div class="pred-label">${cardLabel}</div>
+      <div class="pred-name">${esc(finalName)}</div>
+      ${finalSci ? `<div class="pred-sci">${esc(finalSci)}</div>` : ""}
       <div class="conf-bar-wrap"><div class="conf-bar" style="width:${(conf*100).toFixed(1)}%"></div></div>
       <div class="conf-row">
         <span class="conf-pill ${confCls}">${confLbl} ${(conf*100).toFixed(0)}%</span>
@@ -366,7 +412,7 @@ function renderAgentDecision(decision, plantnet, comparison, agentError) {
 
       <div class="agent-decision ${decCls}">
         <div class="agent-dec-title">${decIcon} ${decTitle}</div>
-        <div class="agent-dec-species">Especie final: <strong>${esc(selected)}</strong></div>
+        ${decision.decision !== "imagen_incorrecta" ? `<div class="agent-dec-species">Especie final: <strong>${esc(selected)}</strong></div>` : ""}
         ${decision.reasoning        ? `<div class="agent-dec-row"><strong>Razonamiento:</strong> ${esc(decision.reasoning)}</div>` : ""}
         ${decision.recommended_action ? `<div class="agent-dec-row"><strong>Acción:</strong> ${esc(decision.recommended_action)}</div>` : ""}
       </div>

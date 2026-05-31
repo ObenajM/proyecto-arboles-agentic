@@ -83,9 +83,13 @@ let dropTarget;
 let cameraStream = null;
 let cameraFacingMode = "environment"; // rear camera by default
 
+function openCameraFallback() {
+  document.getElementById("camera-fallback").click();
+}
+
 async function openCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    toast("Tu navegador no soporta acceso a la cámara. Sube una imagen.", "warning");
+    openCameraFallback();
     return;
   }
 
@@ -105,10 +109,11 @@ async function openCamera() {
       video.srcObject = cameraStream;
     } catch (err) {
       closeCamera();
-      const msg = err.name === "NotAllowedError"
-        ? "Permiso de cámara denegado. Habilítalo en la configuración del navegador."
-        : "No se pudo acceder a la cámara. Sube una imagen.";
-      toast(msg, "error", 5000);
+      if (err.name === "NotAllowedError") {
+        toast("Permiso de cámara denegado. Habilítalo en la configuración del navegador.", "error", 5000);
+      } else {
+        openCameraFallback();
+      }
     }
   };
 
@@ -169,6 +174,9 @@ function initIdentify() {
   input.addEventListener("change", () => { if (input.files[0]) runPredict(input.files[0]); });
   camBtn.addEventListener("click", openCamera);
 
+  const fallback = document.getElementById("camera-fallback");
+  fallback.addEventListener("change", () => { if (fallback.files[0]) runPredict(fallback.files[0]); });
+
   const identifyCamBtn = document.getElementById("identify-camera");
   identifyCamBtn.addEventListener("click", openCamera);
 }
@@ -197,7 +205,7 @@ async function runPredict(file) {
     const resp = await fetch("/api/predict", { method: "POST", body: fd });
     if (!resp.ok) throw new Error(await resp.text());
     const payload = await resp.json();
-    const { results, agent_decision, plantnet, comparison, agent_error } = payload;
+    const { results, agent_decision, plantnet, comparison, health, agent_error } = payload;
 
     if (!results || !results.length) throw new Error("No se obtuvieron predicciones.");
 
@@ -210,7 +218,7 @@ async function runPredict(file) {
     const selectedResult = results.find(r => r.key === selectedKey) || results[0];
     state.detectedSpecies = selectedResult;
 
-    renderPredictions(results, resultBox, agent_decision, plantnet, comparison, agent_error);
+    renderPredictions(results, resultBox, agent_decision, plantnet, comparison, agent_error, health);
     renderSpeciesInfo(selectedResult.key, document.getElementById("species-info-box"), selectedResult.info || null);
     document.getElementById("species-info-box").style.display = "block";
 
@@ -220,12 +228,18 @@ async function runPredict(file) {
       el.textContent = badgeName;
     });
     document.querySelectorAll(".detected-badge-wrap").forEach(el => el.style.display = "flex");
+
+    // Si el select de trivia ya está renderizado, apuntarlo a la especie detectada
+    const trivSel = document.getElementById("trivia-species-select");
+    if (trivSel && trivSel.options.length > 0 && state.detectedSpecies?.key) {
+      trivSel.value = state.detectedSpecies.key;
+    }
   } catch (err) {
     resultBox.innerHTML = `<div class="alert alert-warn">⚠️ Error al analizar: ${err.message}</div>`;
   }
 }
 
-function renderPredictions(results, container, agentDecision = null, plantnet = null, comparison = null, agentError = null) {
+function renderPredictions(results, container, agentDecision = null, plantnet = null, comparison = null, agentError = null, health = null) {
   const top  = results[0];
   const conf = top.prob;
   const sci  = top.info?.nombre_cientifico || "";
@@ -252,7 +266,7 @@ function renderPredictions(results, container, agentDecision = null, plantnet = 
 
   container.innerHTML = `
     <div class="pred-card">
-      <div class="pred-label">Especie más probable del modelo</div>
+      <div class="pred-label">Especie detectada por el modelo</div>
       <div class="pred-name">${esc(top.name)}</div>
       ${sci ? `<div class="pred-sci">${esc(sci)}</div>` : ""}
       <div class="conf-bar-wrap"><div class="conf-bar" style="width:${(conf*100).toFixed(1)}%"></div></div>
@@ -264,48 +278,138 @@ function renderPredictions(results, container, agentDecision = null, plantnet = 
     ${warnHtml}
     ${renderAgentDecision(agentDecision, plantnet, comparison, agentError)}
     ${altHtml}
+    ${renderSaludArbol(health)}
   `;
 }
 
 function renderAgentDecision(decision, plantnet, comparison, agentError) {
-  if (agentError) {
-    return `<div class="alert alert-tip">Agente no disponible. Se muestra solo la predicción local. <br><small>${esc(agentError)}</small></div>`;
+  if (agentError && !decision) {
+    return `<div class="alert alert-tip">Agente validador no disponible — se muestra solo la predicción local.<br><small>${esc(agentError)}</small></div>`;
   }
   if (!decision) return "";
 
   const decisionMap = {
-    aceptar_prediccion: ["✅", "Predicción aceptada", "alert-ok"],
-    mostrar_alternativas: ["⚠️", "Revisar alternativas", "alert-tip"],
-    pedir_nueva_foto: ["📷", "Nueva foto recomendada", "alert-warn"],
-    revision_manual: ["🔬", "Revisión manual recomendada", "alert-warn"],
-    imagen_incorrecta: ["🚫", "Imagen no válida", "alert-warn"],
+    aceptar_prediccion:   ["✅", "Predicción aceptada",           "decision-ok"],
+    mostrar_alternativas: ["⚠️",  "Revisar alternativas",          "decision-warn"],
+    pedir_nueva_foto:     ["📷", "Se recomienda nueva foto",       "decision-warn"],
+    revision_manual:      ["🔬", "Revisión manual recomendada",    "decision-warn"],
+    imagen_incorrecta:    ["🚫", "Imagen no válida",               "decision-err"],
   };
-  const [icon, title, cls] = decisionMap[decision.decision] || ["🤖", "Decisión del agente", "alert-tip"];
-  const plantnetName = decision.plantnet_prediction_common || decision.plantnet_prediction_scientific || "No disponible";
-  const plantnetScore = Number(decision.plantnet_score || 0);
-  const modelScore = Number(decision.model_confidence || 0);
-  const selected = decision.species_selected || decision.model_prediction_common || "—";
+  const [decIcon, decTitle, decCls] = decisionMap[decision.decision] || ["🤖", "Decisión del agente", "decision-warn"];
 
-  const plantnetBlock = decision.web_evidence_used
-    ? `<div style="margin-top:.65rem;font-size:.84rem;line-height:1.55">
-         <strong>Pl@ntNet:</strong> ${esc(plantnetName)} ${plantnetScore ? `· score ${(plantnetScore*100).toFixed(1)}%` : ""}
+  const modelName    = decision.model_prediction_common || "—";
+  const modelConf    = Number(decision.model_confidence || 0);
+  const modelPond    = Number(decision.model_weighted_score || 0);
+  const pnName       = decision.plantnet_prediction_common || "";
+  const pnSci        = decision.plantnet_prediction_scientific || "";
+  const pnScore      = Number(decision.plantnet_score || 0);
+  const pnPond       = Number(decision.plantnet_weighted_score || 0);
+  const pnComunes    = decision.plantnet_common_names || [];
+  const coinciden    = decision.model_plantnet_match;
+  const matchReason  = decision.matching_reason || "";
+  const source       = decision.source_priority || "";
+  const selected     = decision.species_selected || modelName;
+  const webUsed      = decision.web_evidence_used;
+
+  // ── Bloque agente validador ──────────────────────────────────────────────
+  const pnBlock = webUsed
+    ? `<div class="agent-source">
+         <div class="agent-source-hdr">🔬 Agente validador</div>
+         <div class="agent-source-name">${esc(pnName || pnSci)}</div>
+         ${pnSci && pnSci.toLowerCase() !== (pnName||"").toLowerCase()
+           ? `<div class="agent-source-sci">${esc(pnSci)}</div>` : ""}
+         <div class="agent-source-meta">Score: <strong>${(pnScore).toFixed(3)}</strong></div>
+         ${!coinciden ? `<div class="agent-source-meta">Score pond.: <strong>${pnPond.toFixed(3)}</strong></div>` : ""}
+         ${pnComunes.length ? `<div class="agent-source-meta muted">Comunes: ${esc(pnComunes.slice(0,3).join(", "))}</div>` : ""}
        </div>`
-    : `<div style="margin-top:.65rem;font-size:.84rem;line-height:1.55">
-         <strong>Pl@ntNet:</strong> no disponible. ${plantnet?.razon ? esc(plantnet.razon) : ""}
+    : `<div class="agent-source agent-source-na">
+         <div class="agent-source-hdr">🔬 Agente validador</div>
+         <div class="agent-source-na-msg">No disponible${plantnet?.razon ? ` — ${esc(plantnet.razon)}` : ""}</div>
        </div>`;
 
+  // ── Bloque comparación ───────────────────────────────────────────────────
+  let compBody = "";
+  if (webUsed) {
+    if (coinciden) {
+      compBody = `<span class="comp-badge comp-ok">✅ Coinciden</span>
+        <span class="comp-reason">${esc(matchReason)}</span>
+        <span class="comp-shared">Nombre compartido: <strong>${esc(selected)}</strong></span>`;
+    } else {
+      const prioLabel = source === "plantnet" ? "Agente validador" : source === "modelo" ? "Modelo local" : source;
+      const prioScore = source === "plantnet"
+        ? `${pnPond.toFixed(3)} > ${modelPond.toFixed(3)}`
+        : `${modelPond.toFixed(3)} > ${pnPond.toFixed(3)}`;
+      compBody = `<span class="comp-badge comp-no">❌ No coinciden</span>
+        ${matchReason ? `<span class="comp-reason">${esc(matchReason)}</span>` : ""}
+        <span class="comp-prio">Prioridad: <strong>${esc(prioLabel)}</strong> (score ponderado ${prioScore})</span>`;
+    }
+  } else {
+    compBody = `<span class="comp-badge comp-na">— Agente validador no disponible</span>`;
+  }
+
   return `
-    <div class="alert ${cls}">
-      <div style="font-weight:800;margin-bottom:.35rem">${icon} ${title}</div>
-      <div style="font-size:.9rem;line-height:1.6">
-        <strong>Especie final sugerida:</strong> ${esc(selected)}
+    <div class="agent-block">
+      <div class="agent-block-title">Validación por agente</div>
+
+      <div class="agent-sources">
+        <div class="agent-source">
+          <div class="agent-source-hdr">🌳 Modelo local</div>
+          <div class="agent-source-name">${esc(modelName)}</div>
+          <div class="agent-source-meta">Confianza: <strong>${(modelConf*100).toFixed(1)}%</strong></div>
+          ${!coinciden && webUsed ? `<div class="agent-source-meta">Score pond.: <strong>${modelPond.toFixed(3)}</strong></div>` : ""}
+        </div>
+        <div class="agent-source-sep"></div>
+        ${pnBlock}
       </div>
-      <div style="margin-top:.45rem;font-size:.84rem;line-height:1.55">
-        <strong>Modelo:</strong> ${esc(decision.model_prediction_common || "—")} · confianza ${(modelScore*100).toFixed(1)}%
+
+      <div class="agent-comparison">${compBody}</div>
+
+      <div class="agent-decision ${decCls}">
+        <div class="agent-dec-title">${decIcon} ${decTitle}</div>
+        <div class="agent-dec-species">Especie final: <strong>${esc(selected)}</strong></div>
+        ${decision.reasoning        ? `<div class="agent-dec-row"><strong>Razonamiento:</strong> ${esc(decision.reasoning)}</div>` : ""}
+        ${decision.recommended_action ? `<div class="agent-dec-row"><strong>Acción:</strong> ${esc(decision.recommended_action)}</div>` : ""}
       </div>
-      ${plantnetBlock}
-      ${decision.reasoning ? `<div style="margin-top:.65rem;font-size:.86rem;line-height:1.6"><strong>Razón:</strong> ${esc(decision.reasoning)}</div>` : ""}
-      ${decision.recommended_action ? `<div style="margin-top:.4rem;font-size:.86rem;line-height:1.6"><strong>Acción:</strong> ${esc(decision.recommended_action)}</div>` : ""}
+    </div>`;
+}
+
+function renderSaludArbol(health) {
+  if (!health || !health.estado || health.estado === "no_determinado") return "";
+
+  const estadoMap = {
+    aparentemente_sano: ["🟢", "Aparentemente sano"],
+    estres_moderado:    ["🟡", "Estrés moderado"],
+    posible_enfermedad: ["🔴", "Posible enfermedad"],
+    no_es_planta:       ["⚫", "No es planta"],
+    indeterminado:      ["⚪", "Indeterminado"],
+  };
+  const [estIcon, estLabel] = estadoMap[health.estado] || ["⚪", health.estado];
+  const usaPlantnet = ["plantnet_leaf", "plantnet_score"].includes(health.metodo);
+
+  const scoreRow = usaPlantnet && health.score_hoja != null
+    ? `<div class="health-metric"><span class="hm-label">Score (agente validador)</span><span class="hm-val">${Number(health.score_hoja).toFixed(3)}</span></div>`
+    : "";
+
+  const colorRows = (health.pct_verde != null)
+    ? `<div class="health-metric"><span class="hm-label hm-verde">Verde</span><span class="hm-val">${health.pct_verde}%</span></div>
+       <div class="health-metric"><span class="hm-label hm-seco">Seco</span><span class="hm-val">${health.pct_seco}%</span></div>
+       <div class="health-metric"><span class="hm-label hm-marron">Marrón</span><span class="hm-val">${health.pct_marron}%</span></div>`
+    : "";
+
+  return `
+    <div class="health-block">
+      <div class="health-block-title">🌿 Evaluación visual de salud</div>
+      <div class="health-estado">
+        <span class="health-estado-icon">${estIcon}</span>
+        <span class="health-estado-label">${esc(estLabel)}</span>
+        <span class="health-metodo">${esc(health.metodo || "")}</span>
+      </div>
+      <div class="health-metrics">
+        ${scoreRow}
+        ${colorRows}
+      </div>
+      ${health.recomendacion ? `<div class="health-row"><strong>Recomendación:</strong> ${esc(health.recomendacion)}</div>` : ""}
+      ${health.limitacion    ? `<div class="health-row health-limit">${esc(health.limitacion)}</div>` : ""}
     </div>`;
 }
 
@@ -604,7 +708,10 @@ function removeSavedPoint(i) {
 const TV = { score: 0, total: 0, max: 5, state: "ask", answer: null };
 
 async function initTrivia() {
-  if (state.classes.length) { populateTriviaSelect(); return; }
+  if (state.classes.length) {
+    applyDetectedToTrivia();
+    return;
+  }
   const res = await fetch("/api/classes");
   const { classes } = await res.json();
   state.classes = classes;
@@ -616,10 +723,18 @@ function populateTriviaSelect() {
   sel.innerHTML = state.classes.map(c =>
     `<option value="${c.key}">${esc(c.name)}</option>`
   ).join("");
+  applyDetectedToTrivia();
+}
 
-  // Pre-select detected species
-  if (state.detectedSpecies) sel.value = state.detectedSpecies.key;
-  startTriviaRound();
+function applyDetectedToTrivia() {
+  const sel = document.getElementById("trivia-species-select");
+  if (!sel) return;
+  const detectedKey = state.detectedSpecies?.key;
+  if (detectedKey) sel.value = detectedKey;
+  // Arrancar nueva ronda solo si la especie cambió
+  if (sel.value !== state.triviaKey) {
+    startTriviaRound();
+  }
 }
 
 function startTriviaRound() {

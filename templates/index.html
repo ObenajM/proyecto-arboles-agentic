@@ -135,6 +135,9 @@
         </div>
       </div>
 
+      <!-- Camera fallback (native input for devices where getUserMedia fails) -->
+      <input type="file" id="camera-fallback" accept="image/*" capture="environment" style="display:none">
+
       <!-- Results grid -->
       <div class="identify-grid" id="identify-grid" style="display:none">
         <div class="img-preview-wrap" id="preview-wrap" style="display:none">

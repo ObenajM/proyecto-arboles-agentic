@@ -305,6 +305,7 @@ async def predict(file: UploadFile = File(...)):
     plantnet_result: dict | None = None
     comparison: dict | None = None
     agent_error: str | None = None
+    health_result: dict | None = None
 
     # 2) Validación agente: ONNX top-k + Pl@ntNet + reglas de decisión.
     #    Si falla, la API conserva la predicción local y reporta el error.
@@ -335,6 +336,7 @@ async def predict(file: UploadFile = File(...)):
             agent_decision = estado_final.get("decision_final", {})
             plantnet_result = estado_final.get("plantnet_resultado", {})
             comparison = estado_final.get("comparacion", {})
+            health_result = estado_final.get("salud_arbol", {})
         except Exception as exc:
             agent_error = str(exc)
         finally:
@@ -345,11 +347,12 @@ async def predict(file: UploadFile = File(...)):
                     pass
 
     return {
-        "results": results,
+        "results":        results,
         "agent_decision": agent_decision,
-        "plantnet": plantnet_result,
-        "comparison": comparison,
-        "agent_error": agent_error,
+        "plantnet":       plantnet_result,
+        "comparison":     comparison,
+        "health":         health_result,
+        "agent_error":    agent_error,
     }
 
 

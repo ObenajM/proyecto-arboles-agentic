@@ -171,11 +171,11 @@ function initIdentify() {
     if (f) runPredict(f);
   });
 
-  input.addEventListener("change", () => { if (input.files[0]) runPredict(input.files[0]); });
+  input.addEventListener("change", () => { if (input.files[0]) { const f = input.files[0]; input.value = ""; runPredict(f); } });
   camBtn.addEventListener("click", openCamera);
 
   const fallback = document.getElementById("camera-fallback");
-  fallback.addEventListener("change", () => { if (fallback.files[0]) runPredict(fallback.files[0]); });
+  fallback.addEventListener("change", () => { if (fallback.files[0]) { const f = fallback.files[0]; fallback.value = ""; runPredict(f); } });
 
   const identifyCamBtn = document.getElementById("identify-camera");
   identifyCamBtn.addEventListener("click", openCamera);
@@ -284,7 +284,7 @@ function renderPredictions(results, container, agentDecision = null, plantnet = 
 
 function renderAgentDecision(decision, plantnet, comparison, agentError) {
   if (agentError && !decision) {
-    return `<div class="alert alert-tip">Agente validador no disponible — se muestra solo la predicción local.<br><small>${esc(agentError)}</small></div>`;
+    return `<div class="alert alert-warn">📸 Agente validador no reconoce ninguna planta en la imagen, volver a tomar imagen.</div>`;
   }
   if (!decision) return "";
 
@@ -324,7 +324,7 @@ function renderAgentDecision(decision, plantnet, comparison, agentError) {
        </div>`
     : `<div class="agent-source agent-source-na">
          <div class="agent-source-hdr">🔬 Agente validador</div>
-         <div class="agent-source-na-msg">No disponible${plantnet?.razon ? ` — ${esc(plantnet.razon)}` : ""}</div>
+         <div class="agent-source-na-msg">📸 Agente validador no reconoce ninguna planta en la imagen, volver a tomar imagen.</div>
        </div>`;
 
   // ── Bloque comparación ───────────────────────────────────────────────────
@@ -344,7 +344,7 @@ function renderAgentDecision(decision, plantnet, comparison, agentError) {
         <span class="comp-prio">Prioridad: <strong>${esc(prioLabel)}</strong> (score ponderado ${prioScore})</span>`;
     }
   } else {
-    compBody = `<span class="comp-badge comp-na">— Agente validador no disponible</span>`;
+    compBody = `<span class="comp-badge comp-na">📸 Agente validador no reconoce ninguna planta en la imagen, volver a tomar imagen.</span>`;
   }
 
   return `

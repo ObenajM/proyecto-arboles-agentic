@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import base64
 import csv
+import io
 import json
 import os
 import random
+import sys
+import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -31,6 +34,12 @@ BASE_DIR     = Path(__file__).resolve().parent.parent
 MODEL_PATH   = BASE_DIR / "models" / "modelo_arboles_best.onnx"
 CLASSES_PATH = BASE_DIR / "models" / "clases.json"
 INFO_PATH    = BASE_DIR / "data"   / "info.json"
+
+try:
+    sys.path.insert(0, str(BASE_DIR))
+    from agent_validation import ejecutar_agente as _ejecutar_agente
+except Exception:
+    _ejecutar_agente = None
 
 # Geographic centre of the UNAL Medellín campus (WGS84)
 CAMPUS_CENTER = [6.2636427, -75.5764393]
@@ -442,6 +451,30 @@ def inject_custom_css() -> None:
             color: #1E3A8A;
             margin: .7rem 0;
             line-height: 1.6;
+        }
+        .alert-retake {
+            background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
+            border: 1.5px solid #FECDD3;
+            border-left: 4px solid #EF4444;
+            border-radius: 0 var(--r-md) var(--r-md) 0;
+            padding: 1.4rem 1.6rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: .92rem;
+            color: #7F1D1D;
+            margin: .8rem 0;
+            line-height: 1.7;
+        }
+        .alert-retake-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: .5rem;
+        }
+        .alert-retake-tips {
+            margin: .4rem 0 0 1.2rem;
+            padding: 0;
+        }
+        .alert-retake-tips li {
+            margin: .25rem 0;
         }
 
         /* ── Species info card ────────────────────────────────────────────── */
@@ -1716,6 +1749,9 @@ with tab_classify:
         unsafe_allow_html=True,
     )
 
+    if "uploader_key" not in st.session_state:
+        st.session_state["uploader_key"] = 0
+
     mode = st.radio(
         "Fuente:",
         ["📁 Subir imagen", "📷 Usar cámara"],
@@ -1724,38 +1760,103 @@ with tab_classify:
     )
 
     uploaded_file = None
+    _ukey = st.session_state["uploader_key"]
     if mode == "📁 Subir imagen":
         uploaded_file = st.file_uploader(
             "Selecciona una imagen (JPG, PNG)",
             type=["jpg", "jpeg", "png"],
             label_visibility="collapsed",
+            key=f"fu_{_ukey}",
         )
     else:
-        uploaded_file = st.camera_input("Captura una foto", label_visibility="collapsed")
+        uploaded_file = st.camera_input(
+            "Captura una foto",
+            label_visibility="collapsed",
+            key=f"cam_{_ukey}",
+        )
 
     if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert("RGB")
+        img_bytes = uploaded_file.getvalue()
+        image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         col_img, col_res = st.columns([1, 1.4], gap="large")
 
         with col_img:
             st.image(image, caption="Imagen cargada", use_container_width=True)
 
+        _decision = None
         with col_res:
             with st.spinner("Analizando imagen…"):
                 results = run_inference(image, top_k=min(TOP_K, len(class_names)))
+
+            if _ejecutar_agente is not None and os.environ.get("PLANTNET_KEY", "").strip():
+                _tmp_fd, _tmp_path = tempfile.mkstemp(suffix=".jpg")
+                try:
+                    os.close(_tmp_fd)
+                    image.save(_tmp_path, format="JPEG")
+                    _res_agente = _ejecutar_agente(
+                        especie_pred=results[0]["key"],
+                        confianza=results[0]["prob"],
+                        top_k_list=[(r["key"], r["prob"]) for r in results],
+                        info_especie=get_info(results[0]["key"]),
+                        ruta_imagen=_tmp_path,
+                        info_global=species_info,
+                    )
+                    _decision = (_res_agente or {}).get("decision_final", {}).get("decision")
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        os.unlink(_tmp_path)
+                    except Exception:
+                        pass
+
+        # Persist results and reset widget key so the same file can be re-uploaded
+        st.session_state["_cl_image_bytes"] = img_bytes
+        st.session_state["_cl_results"]     = results
+        st.session_state["_cl_decision"]    = _decision
+        if _decision != "imagen_incorrecta":
             st.session_state["detected_species"]    = results[0]["key"]
             st.session_state["detected_confidence"] = results[0]["prob"]
-            render_predictions(results)
+        st.session_state["uploader_key"] += 1
+        st.rerun()
 
-        st.markdown("---")
-        st.markdown(
-            '<div class="section-head">'
-            '<div class="section-head-icon">🌿</div>'
-            '<div><div class="section-head-title">Información de la especie</div></div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        render_species_card(results[0]["key"])
+    elif st.session_state.get("_cl_results") is not None:
+        image     = Image.open(io.BytesIO(st.session_state["_cl_image_bytes"])).convert("RGB")
+        results   = st.session_state["_cl_results"]
+        _decision = st.session_state["_cl_decision"]
+
+        col_img, col_res = st.columns([1, 1.4], gap="large")
+        with col_img:
+            st.image(image, caption="Imagen cargada", use_container_width=True)
+        with col_res:
+            if _decision == "imagen_incorrecta":
+                st.markdown(
+                    '<div class="alert-retake">'
+                    '<div class="alert-retake-title">📸 La imagen no fue reconocida como un árbol</div>'
+                    'El agente validador no detectó ninguna planta en esta foto. '
+                    'Para obtener una identificación exitosa, toma una nueva imagen:<br><br>'
+                    '<ul class="alert-retake-tips">'
+                    '<li>Enfoca bien las <strong>hojas</strong> con fondo despejado</li>'
+                    '<li>Captura las <strong>flores o frutos</strong> si los tiene</li>'
+                    '<li>Usa <strong>luz natural</strong> y evita sombras fuertes</li>'
+                    '<li>Mantén la cámara estable para <strong>evitar el desenfoque</strong></li>'
+                    '</ul>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                render_predictions(results)
+
+        if _decision != "imagen_incorrecta":
+            st.markdown("---")
+            st.markdown(
+                '<div class="section-head">'
+                '<div class="section-head-icon">🌿</div>'
+                '<div><div class="section-head-title">Información de la especie</div></div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            render_species_card(results[0]["key"])
 
     else:
         st.markdown(

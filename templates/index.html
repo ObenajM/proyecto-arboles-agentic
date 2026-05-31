@@ -308,6 +308,24 @@
   </div>
 </div>
 
+<!-- ── Camera modal ───────────────────────────────────────────────────────── -->
+<div class="camera-modal-overlay" id="camera-modal" style="display:none" role="dialog" aria-modal="true" aria-label="Cámara">
+  <div class="camera-modal-inner">
+    <div class="camera-modal-header">
+      <span class="camera-modal-title">📷 Capturar foto</span>
+      <button class="camera-modal-close" id="camera-close" aria-label="Cerrar cámara">✕</button>
+    </div>
+    <div class="camera-video-wrap">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <canvas id="camera-canvas" style="display:none"></canvas>
+    </div>
+    <div class="camera-modal-footer">
+      <button class="btn-capture" id="camera-capture">⊙ Capturar</button>
+      <button class="btn-camera-switch" id="camera-switch" title="Cambiar cámara">⇄</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Scripts ────────────────────────────────────────────────────────────── -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/app.js"></script>

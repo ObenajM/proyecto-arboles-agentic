@@ -74,17 +74,88 @@ function toast(msg, type = "success", ms = 3500) {
   setTimeout(() => t.remove(), ms);
 }
 
+let dropTarget;
+
+// =============================================================================
+// Camera modal (getUserMedia)
+// =============================================================================
+
+let cameraStream = null;
+let cameraFacingMode = "environment"; // rear camera by default
+
+async function openCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast("Tu navegador no soporta acceso a la cámara. Sube una imagen.", "warning");
+    return;
+  }
+
+  const modal    = document.getElementById("camera-modal");
+  const video    = document.getElementById("camera-video");
+  const capture  = document.getElementById("camera-capture");
+  const closeBtn = document.getElementById("camera-close");
+  const switchBtn = document.getElementById("camera-switch");
+
+  const startStream = async (facingMode) => {
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 960 } },
+        audio: false
+      });
+      video.srcObject = cameraStream;
+    } catch (err) {
+      closeCamera();
+      const msg = err.name === "NotAllowedError"
+        ? "Permiso de cámara denegado. Habilítalo en la configuración del navegador."
+        : "No se pudo acceder a la cámara. Sube una imagen.";
+      toast(msg, "error", 5000);
+    }
+  };
+
+  await startStream(cameraFacingMode);
+  if (!cameraStream) return;
+
+  modal.style.display = "flex";
+
+  capture.onclick = () => {
+    const canvas = document.getElementById("camera-canvas");
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+      closeCamera();
+      runPredict(new File([blob], "captura.jpg", { type: "image/jpeg" }));
+    }, "image/jpeg", 0.92);
+  };
+
+  switchBtn.onclick = async () => {
+    cameraFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+    await startStream(cameraFacingMode);
+  };
+
+  closeBtn.onclick = closeCamera;
+
+  modal.onclick = e => { if (e.target === modal) closeCamera(); };
+}
+
+function closeCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  const modal = document.getElementById("camera-modal");
+  modal.style.display = "none";
+  document.getElementById("camera-video").srcObject = null;
+}
+
 // =============================================================================
 // IDENTIFY section
 // =============================================================================
-
-let dropTarget;
 
 function initIdentify() {
   const zone  = document.getElementById("upload-zone");
   const input = document.getElementById("file-input");
   const camBtn = document.getElementById("camera-btn");
-  const camIn  = document.getElementById("camera-input");
 
   zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
   zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
@@ -96,13 +167,10 @@ function initIdentify() {
   });
 
   input.addEventListener("change", () => { if (input.files[0]) runPredict(input.files[0]); });
-  camBtn.addEventListener("click", () => camIn.click());
-  camIn.addEventListener("change", () => { if (camIn.files[0]) runPredict(camIn.files[0]); });
+  camBtn.addEventListener("click", openCamera);
 
   const identifyCamBtn = document.getElementById("identify-camera");
-  const identifyCamIn  = document.getElementById("identify-camera-input");
-  identifyCamBtn.addEventListener("click", () => identifyCamIn.click());
-  identifyCamIn.addEventListener("change", () => { if (identifyCamIn.files[0]) runPredict(identifyCamIn.files[0]); });
+  identifyCamBtn.addEventListener("click", openCamera);
 }
 
 async function runPredict(file) {

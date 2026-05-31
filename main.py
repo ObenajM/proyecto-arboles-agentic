@@ -17,6 +17,13 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+# Cargar variables de entorno desde .env (PLANTNET_KEY, ANTHROPIC_API_KEY, etc.)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except Exception:
+    pass
+
 import numpy as np
 import onnxruntime as ort
 from fastapi import FastAPI, File, HTTPException, UploadFile

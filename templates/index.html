@@ -40,9 +40,7 @@
     <button class="nav-link" data-nav="trivia">Trivia</button>
   </div>
 
-  <button class="nav-cta" id="nav-cta">
-    <span>📷</span> Subir foto
-  </button>
+  <button class="nav-cta" id="nav-cta">Subir foto</button>
 </nav>
 
 <!-- ── Page wrapper ────────────────────────────────────────────────────────── -->
@@ -51,7 +49,7 @@
   <!-- ── HERO ────────────────────────────────────────────────────────────── -->
   <section id="hero">
     <div class="hero-left">
-      <div class="hero-eyebrow">🌿 Arboretum & Palmetum · UNAL Medellín</div>
+      <div class="hero-eyebrow">Arboretum &amp; Palmetum · UNAL Medellín</div>
       <h1 class="hero-title font-display">
         Explora, <em>identifica</em><br>y protege los árboles<br>del campus
       </h1>
@@ -59,8 +57,8 @@
         Una experiencia visual para reconocer especies en segundos, ubicar ejemplares reales y aprender con contenido botánico.
       </p>
       <div class="hero-actions">
-        <button class="btn-primary" data-nav-to="identify">📷 Identificar una especie</button>
-        <button class="btn-secondary" data-nav-to="map">🗺 Ver mapa del campus</button>
+        <button class="btn-primary" data-nav-to="identify">Identificar una especie</button>
+        <button class="btn-secondary" data-nav-to="map">Ver mapa del campus</button>
       </div>
       <div class="hero-stats">
         <div class="hero-stat">
@@ -82,16 +80,6 @@
       <div class="hero-map-card">
         <div class="hero-map-inner">
           <div id="hero-mini-map"></div>
-        </div>
-        <div class="hero-result-card">
-          <div class="hero-result-label">Resultado IA</div>
-          <div class="hero-result-name font-display">Guayacán amarillo</div>
-          <div class="hero-result-sci">Handroanthus chrysanthus</div>
-          <div class="hero-conf-bar-wrap">
-            <span class="hero-conf-bar-label">Confianza</span>
-            <div class="hero-conf-bar"><div class="hero-conf-bar-fill"></div></div>
-            <span class="hero-conf-pct">92%</span>
-          </div>
         </div>
       </div>
     </div>
@@ -136,7 +124,7 @@
         <div class="upload-title">Arrastra tu foto aquí</div>
         <div class="upload-sub">JPG, PNG — o haz clic para seleccionar</div>
         <div class="upload-or">o</div>
-        <button class="btn-camera" id="camera-btn" type="button">📷 Usar cámara</button>
+        <button class="btn-camera" id="camera-btn" type="button">Usar cámara</button>
         <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none">
       </div>
 
@@ -149,24 +137,17 @@
       </div>
 
       <!-- Reset -->
-      <div style="margin-top:1rem;display:flex;gap:.75rem;align-items:center">
+      <div style="margin-top:1rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
         <button class="btn-secondary" id="identify-reset" style="display:none">↺ Nueva imagen</button>
-        <div class="detected-badge-wrap" style="display:none;flex:1">
+        <button class="btn-camera" id="identify-camera" style="display:none">Tomar foto</button>
+        <input type="file" id="identify-camera-input" accept="image/*" capture="environment" style="display:none">
+        <div class="detected-badge-wrap" style="display:none;flex:1;min-width:200px">
           <div class="detected-badge">
-            🌿 Detectada: <span class="detected-name" style="font-weight:800;margin-left:.3rem"></span>
-            <button onclick="navigate('map')" style="margin-left:auto;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:var(--r-pill);padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">📍 Mapear</button>
+            Detectada: <span class="detected-name" style="font-weight:800;margin-left:.3rem"></span>
+            <button onclick="navigate('map')" style="margin-left:auto;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:var(--r-pill);padding:.3rem .8rem;font-size:.8rem;font-weight:600;cursor:pointer">Mapear</button>
           </div>
         </div>
       </div>
-
-      <!-- Show reset only when result is visible -->
-      <script>
-        document.getElementById("identify-result")
-          .addEventListener("DOMSubtreeModified", () => {
-            document.getElementById("identify-reset").style.display =
-              document.getElementById("identify-result").style.display !== "none" ? "" : "none";
-          });
-      </script>
 
       <!-- Species info -->
       <div id="species-info-box" style="display:none"></div>
@@ -222,20 +203,20 @@
           <div class="map-panel">
             <div class="map-panel-title">Vista del mapa</div>
             <div class="map-style-toggle">
-              <button class="map-style-btn active" id="btn-satellite">🛰 Satelital</button>
-              <button class="map-style-btn" id="btn-streets">🗺 Calles</button>
+              <button class="map-style-btn active" id="btn-satellite">Satelital</button>
+              <button class="map-style-btn" id="btn-streets">Calles</button>
             </div>
           </div>
 
           <!-- GPS -->
           <div class="map-panel">
             <div class="map-panel-title">Ubicación</div>
-            <button class="btn-full btn-full-primary" id="btn-gps">📍 Activar GPS</button>
+            <button class="btn-full btn-full-primary" id="btn-gps">Activar GPS</button>
             <div id="gps-display-wrap" style="display:none">
               <div class="location-display" id="gps-display"></div>
             </div>
             <div id="click-display-wrap" style="display:none;margin-top:.5rem">
-              <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--amber);margin-bottom:.3rem">🖱 Punto seleccionado</div>
+              <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--amber);margin-bottom:.3rem">Punto seleccionado</div>
               <div class="location-display" id="click-display"></div>
             </div>
           </div>
@@ -244,19 +225,19 @@
           <div class="map-panel">
             <div class="map-panel-title">Especie identificada</div>
             <div class="detected-badge-wrap" style="display:none">
-              <div class="detected-badge">🌿 <span class="detected-name"></span></div>
+              <div class="detected-badge"><span class="detected-name"></span></div>
             </div>
             <div class="detected-badge-wrap" id="no-detected-msg" style="color:var(--neutral-400);font-size:.83rem;line-height:1.5">
               Identifica una especie en <strong>Identificar</strong> y luego guárdala aquí.
             </div>
-            <button class="btn-full btn-full-primary" id="btn-save-tree" style="margin-top:.75rem">💾 Guardar árbol en mapa</button>
+            <button class="btn-full btn-full-primary" id="btn-save-tree" style="margin-top:.75rem">Guardar árbol en mapa</button>
           </div>
 
           <!-- Sync -->
           <div class="map-panel">
             <div class="map-panel-title">Árboles guardados</div>
             <div class="saved-list" id="saved-list"></div>
-            <button class="btn-full btn-full-secondary" id="btn-sync" style="margin-top:.75rem">☁️ Sincronizar GitHub</button>
+            <button class="btn-full btn-full-secondary" id="btn-sync" style="margin-top:.75rem">Sincronizar GitHub</button>
           </div>
 
         </div>
@@ -289,7 +270,7 @@
           <div style="margin-top:.5rem">
             <div class="detected-badge-wrap" style="display:none">
               <div class="detected-badge" style="font-size:.82rem">
-                🔍 Detectada: <span class="detected-name" style="font-weight:800;margin-left:.3rem"></span>
+                Detectada: <span class="detected-name" style="font-weight:800;margin-left:.3rem"></span>
               </div>
             </div>
           </div>
@@ -320,7 +301,7 @@
 
 <!-- ── PWA install banner ─────────────────────────────────────────────────── -->
 <div class="install-banner" id="install-banner" style="display:none">
-  <p>📱 Instala <strong>Campus Tree Explorer</strong> como app — funciona sin conexión</p>
+  <p>Instala <strong>Campus Tree Explorer</strong> como app — funciona sin conexión</p>
   <div class="install-banner-actions">
     <button class="btn-install" onclick="installApp()">Instalar</button>
     <button class="btn-dismiss" onclick="dismissInstall()">Ahora no</button>

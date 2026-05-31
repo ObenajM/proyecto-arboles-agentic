@@ -98,6 +98,11 @@ function initIdentify() {
   input.addEventListener("change", () => { if (input.files[0]) runPredict(input.files[0]); });
   camBtn.addEventListener("click", () => camIn.click());
   camIn.addEventListener("change", () => { if (camIn.files[0]) runPredict(camIn.files[0]); });
+
+  const identifyCamBtn = document.getElementById("identify-camera");
+  const identifyCamIn  = document.getElementById("identify-camera-input");
+  identifyCamBtn.addEventListener("click", () => identifyCamIn.click());
+  identifyCamIn.addEventListener("change", () => { if (identifyCamIn.files[0]) runPredict(identifyCamIn.files[0]); });
 }
 
 async function runPredict(file) {
@@ -105,6 +110,8 @@ async function runPredict(file) {
   resultBox.innerHTML = `<div class="spinner-wrap"><div class="spinner"></div><p style="color:var(--neutral-500);font-size:.9rem">Analizando imagen…</p></div>`;
   resultBox.style.display = "block";
   document.getElementById("upload-zone").style.display = "none";
+  document.getElementById("identify-reset").style.display = "";
+  document.getElementById("identify-camera").style.display = "";
 
   // Preview
   const reader = new FileReader();
@@ -170,14 +177,14 @@ function renderPredictions(results, container, agentDecision = null, plantnet = 
   }
 
   const warnHtml = conf < .50
-    ? `<div class="alert alert-warn">⚠️ Confianza baja — intenta con foto más nítida mostrando hojas, flores o frutos.</div>`
+    ? `<div class="alert alert-warn">Confianza baja — intenta con foto más nítida mostrando hojas, flores o frutos.</div>`
     : conf < .75
-    ? `<div class="alert alert-tip">💡 Confianza moderada — verifica rasgos botánicos antes de concluir.</div>`
+    ? `<div class="alert alert-tip">Confianza moderada — verifica rasgos botánicos antes de concluir.</div>`
     : "";
 
   container.innerHTML = `
     <div class="pred-card">
-      <div class="pred-label">🌿 Especie más probable del modelo</div>
+      <div class="pred-label">Especie más probable del modelo</div>
       <div class="pred-name">${esc(top.name)}</div>
       ${sci ? `<div class="pred-sci">${esc(sci)}</div>` : ""}
       <div class="conf-bar-wrap"><div class="conf-bar" style="width:${(conf*100).toFixed(1)}%"></div></div>
@@ -194,7 +201,7 @@ function renderPredictions(results, container, agentDecision = null, plantnet = 
 
 function renderAgentDecision(decision, plantnet, comparison, agentError) {
   if (agentError) {
-    return `<div class="alert alert-tip">🤖 Agente no disponible. Se muestra solo la predicción local. <br><small>${esc(agentError)}</small></div>`;
+    return `<div class="alert alert-tip">Agente no disponible. Se muestra solo la predicción local. <br><small>${esc(agentError)}</small></div>`;
   }
   if (!decision) return "";
 
@@ -240,6 +247,9 @@ function resetIdentify() {
   document.getElementById("species-info-box").style.display = "none";
   document.getElementById("identify-grid").style.display = "none";
   document.getElementById("preview-wrap").style.display = "none";
+  document.getElementById("identify-reset").style.display = "none";
+  document.getElementById("identify-camera").style.display = "none";
+  document.querySelectorAll(".detected-badge-wrap").forEach(el => el.style.display = "none");
 }
 
 // =============================================================================
@@ -273,7 +283,6 @@ function renderCatalogGrid(items) {
   }
   grid.innerHTML = items.map(c => `
     <div class="species-card" onclick="loadSpeciesDetail('${c.key}')">
-      <div class="species-card-icon">🌿</div>
       <div class="species-card-name">${esc(c.name)}</div>
       ${c.scientific ? `<div class="species-card-sci">${esc(c.scientific)}</div>` : ""}
       ${c.family ? `<div class="species-card-fam">${esc(c.family)}</div>` : ""}
@@ -306,12 +315,12 @@ function renderSpeciesInfo(key, container, infoData = null) {
   const sci  = info.nombre_cientifico || "";
 
   const pills = [
-    info.familia ? `<span class="pill-tag">🏷 Familia: <strong>${esc(info.familia)}</strong></span>` : "",
-    info.altura_aproximada ? `<span class="pill-tag">📏 Altura: <strong>${esc(info.altura_aproximada)}</strong></span>` : "",
+    info.familia ? `<span class="pill-tag">Familia: <strong>${esc(info.familia)}</strong></span>` : "",
+    info.altura_aproximada ? `<span class="pill-tag">Altura: <strong>${esc(info.altura_aproximada)}</strong></span>` : "",
   ].filter(Boolean).join("");
 
-  const row = (icon, label, val) => val
-    ? `<div><div class="sec-label">${icon} ${label}</div><div class="info-text">${esc(val)}</div></div>`
+  const row = (label, val) => val
+    ? `<div><div class="sec-label">${label}</div><div class="info-text">${esc(val)}</div></div>`
     : "";
 
   const backBtn = infoData
@@ -321,23 +330,23 @@ function renderSpeciesInfo(key, container, infoData = null) {
   container.innerHTML = `
     ${backBtn}
     <div class="info-card">
-      <div class="info-title">🌿 ${esc(name)}</div>
+      <div class="info-title">${esc(name)}</div>
       ${sci ? `<div class="info-sci">${esc(sci)}</div>` : ""}
       ${pills ? `<div class="pills">${pills}</div>` : ""}
-      ${row("📖","Descripción", info.descripcion)}
-      ${row("🔎","Cómo identificarlo", info.como_identificarlo)}
+      ${row("Descripción", info.descripcion)}
+      ${row("Cómo identificarlo", info.como_identificarlo)}
       <div class="grid-2">
-        ${row("🍃","Hojas", info.hojas)}
-        ${row("🌸","Flores", info.flores)}
+        ${row("Hojas", info.hojas)}
+        ${row("Flores", info.flores)}
       </div>
       <div class="grid-2">
-        ${row("🍑","Frutos", info.frutos)}
-        ${row("🌍","Distribución", info.distribucion)}
+        ${row("Frutos", info.frutos)}
+        ${row("Distribución", info.distribucion)}
       </div>
-      ${row("🛠","Usos", info.usos)}
-      ${info.dato_curioso ? `<div class="fact-card">💡 <strong>Dato curioso:</strong> ${esc(info.dato_curioso)}</div>` : ""}
+      ${row("Usos", info.usos)}
+      ${info.dato_curioso ? `<div class="fact-card"><strong>Dato curioso:</strong> ${esc(info.dato_curioso)}</div>` : ""}
       <div class="historia-card">
-        <div class="historia-label">🌎 Origen, historia en Colombia y usos</div>
+        <div class="historia-label">Origen, historia en Colombia y usos</div>
         <div class="historia-text">${info.historia_origen_colombia_usos
           ? esc(info.historia_origen_colombia_usos)
           : '<em style="color:var(--neutral-400)">Información no disponible para esta especie.</em>'
@@ -476,7 +485,7 @@ async function saveTree() {
     state.mapPoints.push({ ...body, name: body.common_name, lat: coords[0], lon: coords[1] });
     refreshMapMarkers();
     renderSavedList();
-    toast(`✅ ${body.common_name} guardado en el mapa.`);
+    toast(`${body.common_name} guardado en el mapa.`);
   } catch (err) {
     toast(`Error al guardar: ${err.message}`, "error");
   }
@@ -509,7 +518,7 @@ function renderSavedList() {
   }
   list.innerHTML = state.mapPoints.map((pt, i) => `
     <div class="saved-item">
-      <span class="saved-item-name">🌳 ${esc(pt.name)}</span>
+      <span class="saved-item-name">${esc(pt.name)}</span>
       <button class="saved-item-del" onclick="removeSavedPoint(${i})">✕</button>
     </div>`).join("");
 }
@@ -611,7 +620,7 @@ function checkAnswer(chosen) {
       ${correct ? "✅ ¡Correcto!" : `❌ La respuesta era: <strong>${esc(TV.answer)}</strong>`}
     </div>
     <button class="btn-primary" style="width:100%;justify-content:center" onclick="${isLast ? "showTriviaResult()" : "loadNextQuestion()"}">
-      ${isLast ? "Ver resultados 🏆" : "Siguiente →"}
+      ${isLast ? "Ver resultados" : "Siguiente"}
     </button>`;
   card.appendChild(fb);
 }

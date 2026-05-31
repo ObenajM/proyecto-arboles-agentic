@@ -598,7 +598,7 @@ Responde solo JSON válido:
         if anthropic_key:
             import anthropic
             msg = anthropic.Anthropic(api_key=anthropic_key).messages.create(
-                model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+                model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
                 max_tokens=350,
                 messages=[{"role": "user", "content": prompt}],
             )

@@ -1611,7 +1611,7 @@ with st.sidebar:
     st.markdown(
         f'<div class="sidebar-stat">'
         f'<span class="sidebar-stat-key">Especies</span>'
-        f'<span class="sidebar-stat-val">{len(class_names)}</span>'
+        f'<span class="sidebar-stat-val">313</span>'
         f'</div>'
         f'<div class="sidebar-stat">'
         f'<span class="sidebar-stat-key">Formato</span>'
@@ -1636,7 +1636,7 @@ with st.sidebar:
             st.markdown(
                 f'<p style="font-family:Outfit,sans-serif;font-size:.78rem;'
                 f'color:rgba(82,183,136,.45);margin:.4rem 0 0;font-style:italic">'
-                f'… y {len(class_names) - 14} más — ver en Catálogo</p>',
+                f'… y {313 - 14} más — ver en Catálogo</p>',
                 unsafe_allow_html=True,
             )
 
@@ -1678,7 +1678,7 @@ st.markdown(
         </p>
         <div class="hero-stat-row">
             <div class="hero-stat">
-                <span class="hero-stat-val">{len(class_names)}</span>
+                <span class="hero-stat-val">313</span>
                 <span class="hero-stat-lbl">Especies</span>
             </div>
             <div class="hero-stat">
